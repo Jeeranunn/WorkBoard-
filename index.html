@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WorkBoard ERP (Live Connected)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+   <style>
+    body { font-family: 'Sarabun', sans-serif; background-color: #f8fafc; font-size: 18px; font-weight: 500; color: #1e293b; }
+    .hide-scroll::-webkit-scrollbar { display: none; }
+    .text-xs { font-size: 1rem !important; font-weight: 500; }
+    .text-sm { font-size: 1.15rem !important; }
+    .text-\[9px\]  { font-size: 0.9rem !important; font-weight: 500; }
+    .text-\[10px\] { font-size: 0.95rem !important; font-weight: 500; }
+    .text-\[11px\] { font-size: 1rem !important; font-weight: 500; }
+    .text-slate-400 { color: #64748b !important; }
+    .text-slate-500 { color: #475569 !important; }
+    .font-bold { font-weight: 600 !important; }
+    table { font-weight: 500; }
+    .teamFilterBtn { background:#f1f5f9; color:#64748b; }
+    .teamFilterBtn.active-filter { background:#4f46e5; color:#fff; }
+</style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col relative">
+
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/90 z-[1000] flex flex-col items-center justify-center text-white transition-opacity duration-300">
+        <i class="fas fa-circle-notch fa-spin text-5xl mb-4 text-indigo-400"></i>
+        <h2 class="text-xl font-bold">กำลังซิงค์ข้อมูลกับระบบส่วนกลาง...</h2>
+        <p class="text-sm text-slate-400 mt-2">รอสักครู่ ระบบกำลังประมวลผล</p>
+    </div>
+
+    <div id="loginScreen" class="fixed inset-0 bg-slate-900 z-50 hidden flex flex-col items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl w-full max-w-sm space-y-6 shadow-2xl">
+            <div class="text-center">
+                <div class="inline-flex p-4 bg-indigo-600 text-white rounded-2xl text-3xl mb-4 shadow-lg"><i class="fas fa-layer-group"></i></div>
+                <h2 class="text-2xl font-bold text-slate-800">WorkBoard ERP</h2>
+                <p class="text-sm text-slate-500 mt-1">ระบบจัดการงาน</p>
+            </div>
+            <div class="space-y-4">
+                <input type="email" id="loginEmail" placeholder="อีเมลผู้ใช้งาน" class="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 focus:outline-none focus:border-indigo-500 transition">
+                <input type="password" id="loginPassword" placeholder="รหัสผ่าน" class="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 focus:outline-none focus:border-indigo-500 transition">
+                <button onclick="handleSecureLogin()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-md transition duration-200">เข้าสู่ระบบ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="appContainer" class="hidden flex-1 flex flex-col">
+        <header class="bg-white border-b border-slate-200 sticky top-0 z-40 px-6 py-4 flex justify-between items-center shadow-sm">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-bold text-sm tracking-wider shadow-sm">WB</div>
+                <h1 class="text-sm font-bold text-slate-800">WorkBoard <span id="roleBadge" class="text-[10px] text-slate-600 px-2 py-0.5 rounded-full ml-2 border border-slate-200 bg-slate-50"></span></h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="text-xs font-mono text-slate-500 font-medium" id="userEmailDisplay">...</div>
+                <button onclick="manualRefresh()" id="btnManualRefresh" class="text-xs text-indigo-600 font-bold border border-indigo-200 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition"><i class="fas fa-sync-alt mr-1"></i> รีเฟรชข้อมูล</button>
+                <button onclick="handleLogout()" class="text-xs text-rose-500 font-bold border border-rose-200 hover:bg-rose-50 px-3 py-1.5 rounded-lg transition"><i class="fas fa-sign-out-alt mr-1"></i> ออกจากระบบ</button>
+            </div>
+        </header>
+
+        <main class="max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6 flex-1">
+            <div id="bossPanel" class="hidden space-y-6">
+
+                <!-- (1) คณะทำงาน — ยุบเหลือปุ่มใหญ่ เปิด Team Dashboard -->
+                <div class="bg-sky-50 rounded-2xl border border-sky-200 shadow-sm p-6 flex items-center justify-between">
+                    <div>
+                        <h2 class="font-bold text-slate-800 text-sm"><i class="fas fa-users text-sky-500 mr-2"></i> คณะทำงาน</h2>
+                        <p class="text-[11px] text-slate-500 mt-1">ดูสถานะการทำงาน ความคืบหน้า และ Workload ของทุกคนแบบเรียลไทม์</p>
+                    </div>
+                    <button onclick="openTeamDashboard()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-xl shadow-md transition text-sm">
+                        <i class="fas fa-chart-pie mr-2"></i> เปิด Team Dashboard
+                    </button>
+                </div>
+
+                <div class="bg-rose-50 rounded-2xl border border-rose-200 shadow-sm p-5 space-y-4">
+                    <div class="flex justify-between items-center border-b border-rose-200 pb-3">
+                        <h2 class="font-bold text-slate-800 text-sm"><i class="fas fa-inbox text-rose-500 mr-2"></i> (2) ตรวจงาน</h2>
+                        <button onclick="toggleView('bossArchive')" id="btnBossArchive" class="text-xs bg-white border border-slate-200 font-bold px-3 py-1.5 rounded-lg hover:bg-slate-100 transition"><i class="fas fa-archive mr-1"></i> ดูประวัติย้อนหลัง</button>
+                    </div>
+                    <div class="overflow-x-auto max-h-80 hide-scroll">
+                        <table class="w-full text-left text-xs text-slate-600">
+                            <thead class="bg-white font-semibold sticky top-0 border-b border-rose-200">
+                                <tr><th class="p-3">งาน (โครงการ)</th><th class="p-3">ผู้ปฏิบัติงาน (ฝ่าย)</th><th class="p-3 text-center">ส่งถึง / CC</th><th class="p-3 text-center">กำหนดส่ง</th><th class="p-3 text-center">Tags</th><th class="p-3 text-center">จัดการ</th></tr>
+                            </thead>
+                            <tbody id="bossTasksTableBody" class="divide-y divide-rose-100 bg-white"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="bg-cyan-50 rounded-2xl border border-cyan-200 shadow-sm p-5 flex flex-col h-80 relative">
+                        <h2 class="font-bold text-sm border-b border-cyan-200 pb-2 mb-3 text-slate-800"><i class="fas fa-share-alt text-sky-500 mr-2"></i> (3) สำเนารับทราบ (CC)</h2>
+                        <button onclick="toggleArchiveBox('cc')" class="absolute top-4 right-4 text-[10px] bg-white border border-slate-200 px-2 py-1 rounded shadow-sm hover:bg-slate-100"><i class="fas fa-history"></i> ประวัติ</button>
+                        <div id="bossCcBox" class="flex-1 overflow-y-auto space-y-2 hide-scroll text-xs"></div>
+                    </div>
+                    <div class="space-y-6 flex flex-col h-80">
+                        <div class="bg-purple-50 rounded-2xl border border-purple-200 shadow-sm p-4 flex-1 flex flex-col relative">
+                            <h2 class="font-bold text-sm border-b border-purple-200 pb-2 mb-2 text-slate-800"><i class="fas fa-history text-purple-500 mr-2"></i> (4) บันทึกข้อความ</h2>
+                            <button onclick="toggleArchiveBox('note')" class="absolute top-3 right-3 text-[10px] bg-white border border-slate-200 px-2 py-1 rounded shadow-sm hover:bg-slate-100"><i class="fas fa-history"></i></button>
+                            <div id="bossNotesBox" class="flex-1 overflow-y-auto space-y-2 hide-scroll text-xs"></div>
+                        </div>
+                        <div class="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm p-4 flex-1 flex flex-col">
+                            <h2 class="font-bold text-sm border-b border-amber-200 pb-2 mb-2 text-slate-800"><i class="far fa-comments text-amber-500 mr-2"></i> (5) กล่องคำถาม</h2>
+                            <div id="bossQuestionBox" class="flex-1 overflow-y-auto space-y-2 hide-scroll text-xs"></div>
+                        </div>
+                    </div>
+                    <div class="space-y-6 flex flex-col h-80">
+                        <div class="bg-indigo-50 rounded-2xl border border-indigo-200 shadow-sm p-4 flex-1 flex flex-col relative">
+                            <h2 class="font-bold text-sm border-b border-indigo-200 pb-2 mb-2 text-slate-800"><i class="far fa-calendar-alt text-indigo-500 mr-2"></i> (6) ขอนัดหมาย</h2>
+                            <button onclick="toggleArchiveBox('meet')" class="absolute top-3 right-3 text-[10px] bg-white border border-slate-200 px-2 py-1 rounded shadow-sm hover:bg-slate-100"><i class="fas fa-history"></i></button>
+                            <div id="bossMeetingsBox" class="flex-1 overflow-y-auto space-y-2 hide-scroll text-xs"></div>
+                        </div>
+                        <div class="bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm p-4 flex-1 flex flex-col">
+                            <h2 class="font-bold text-sm border-b border-emerald-200 pb-2 mb-2 text-slate-800"><i class="fas fa-chart-line text-emerald-500 mr-2"></i> (7) ความก้าวหน้าโครงการ</h2>
+                            <div id="bossProjectProgressSummary" class="flex-1 overflow-y-auto space-y-3 hide-scroll"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============ Team Dashboard (หน้าใหม่) ============ -->
+            <div id="teamDashboardPage" class="hidden flex-1 flex flex-col">
+                <div class="max-w-7xl w-full mx-auto space-y-6">
+
+                    <div class="flex justify-between items-center">
+                        <button onclick="closeTeamDashboard()" class="text-xs bg-white border border-slate-200 font-bold px-3 py-2 rounded-lg hover:bg-slate-100 transition">
+                            <i class="fas fa-arrow-left mr-1"></i> กลับหน้าหลัก
+                        </button>
+                        <div class="flex gap-2">
+                            <button onclick="openCreateProjectModal()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-2 rounded-lg shadow-sm transition"><i class="fas fa-user-plus mr-1"></i> มอบหมายงาน/สร้างโปรเจค</button>
+                            <button onclick="openModal('orgMeetHistoryModal')" class="text-xs bg-white border border-slate-200 font-bold px-3 py-2 rounded-lg hover:bg-slate-100 transition">ประวัติมีททั้งหมด</button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                            <p class="text-[11px] font-bold text-slate-400 uppercase">งานย่อยทั้งหมด</p>
+                            <p id="kpiTotalTasks" class="text-3xl font-bold text-slate-800 mt-1">0</p>
+                        </div>
+                        <div class="bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm p-4">
+                            <p class="text-[11px] font-bold text-emerald-600 uppercase">On-time</p>
+                            <p class="mt-1"><span id="kpiOnTimeCount" class="text-3xl font-bold text-emerald-700">0</span>
+                                <span id="kpiOnTimePct" class="text-xs font-bold text-emerald-500 ml-1">(0%)</span></p>
+                        </div>
+                        <div class="bg-rose-50 rounded-2xl border border-rose-200 shadow-sm p-4">
+                            <p class="text-[11px] font-bold text-rose-600 uppercase">Late</p>
+                            <p class="mt-1"><span id="kpiLateCount" class="text-3xl font-bold text-rose-700">0</span>
+                                <span id="kpiLatePct" class="text-xs font-bold text-rose-500 ml-1">(0%)</span></p>
+                        </div>
+                        <div class="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm p-4">
+                            <p class="text-[11px] font-bold text-amber-600 uppercase">คนว่างงาน</p>
+                            <p id="kpiIdleCount" class="text-3xl font-bold text-amber-700 mt-1">0</p>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2 items-center bg-white border border-slate-200 rounded-xl p-2">
+                        <span class="text-[11px] font-bold text-slate-500 pl-2"><i class="fas fa-filter mr-1"></i> กรอง:</span>
+                        <button onclick="filterTeamDash('all')" class="teamFilterBtn active-filter text-xs font-bold px-3 py-1.5 rounded-lg" data-filter="all">ทั้งหมด</button>
+                        <button onclick="filterTeamDash('working')" class="teamFilterBtn text-xs font-bold px-3 py-1.5 rounded-lg" data-filter="working">กำลังทำงาน</button>
+                        <button onclick="filterTeamDash('late')" class="teamFilterBtn text-xs font-bold px-3 py-1.5 rounded-lg" data-filter="late">ล่าช้า</button>
+                        <button onclick="filterTeamDash('idle')" class="teamFilterBtn text-xs font-bold px-3 py-1.5 rounded-lg" data-filter="idle">ว่างงาน</button>
+                    </div>
+
+                    <div id="teamMemberGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                        <!-- JS จะ render การ์ดพนักงานแต่ละคนใส่ตรงนี้ -->
+                    </div>
+                </div>
+            </div>
+            <!-- ============ /Team Dashboard ============ -->
+
+            <div id="staffPanel" class="hidden space-y-6">
+                <div id="headReviewSection" class="hidden bg-indigo-50 border border-indigo-200 rounded-2xl shadow-sm p-5 space-y-3 mb-6">
+                    <div class="flex justify-between items-center border-b border-indigo-200 pb-2">
+                        <h2 class="font-bold text-indigo-900 text-sm"><i class="fas fa-clipboard-check mr-2"></i> งานรอตรวจ (<span id="headDeptName"></span>)</h2>
+                        <button onclick="openCreateProjectModal()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3 py-1.5 rounded-lg shadow-sm transition"><i class="fas fa-plus mr-1"></i> เพิ่มโครงการ & มอบหมายงาน</button>
+                    </div>
+                    <div class="overflow-x-auto max-h-60 hide-scroll border border-indigo-100 rounded-xl">
+                        <table class="w-full text-left text-xs bg-white">
+                            <thead class="bg-indigo-100 text-indigo-900"><tr><th class="p-3">งาน (ผู้รับผิดชอบ)</th><th class="p-3 text-center">กำหนดส่ง</th><th class="p-3 text-center">จัดการ</th></tr></thead>
+                            <tbody id="headTasksTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="bg-teal-50 rounded-2xl border border-teal-200 shadow-sm p-6 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                    <div class="md:col-span-5 text-center md:text-left">
+                        <h2 class="font-bold text-slate-500 text-xs uppercase tracking-wider">ระบบลงเวลาปฏิบัติงาน</h2>
+                        <p id="clockStatus" class="text-sm text-slate-800 font-bold mt-1">🔴 Offline (ยังไม่ได้ ClockOut )</p>
+                        <p id="timeLogged" class="text-[11px] text-slate-400 mt-1">อัปเดตล่าสุด: -</p>
+                    </div>
+                    <div class="md:col-span-3 bg-slate-900 text-white p-3 rounded-xl text-center shadow-inner">
+                        <span class="text-[10px] text-slate-400 block mb-1">เวลาทำงานสะสม</span>
+                        <div id="masterTimerDisplay" class="text-2xl font-mono font-bold text-emerald-400 tracking-wider">00:00:00</div>
+                    </div>
+                    <div class="md:col-span-4">
+                        <button onclick="masterClockOut()" id="btnClockOut" class="w-full bg-slate-100 text-slate-400 font-bold py-3 rounded-xl text-sm cursor-not-allowed transition" disabled>🔴 ClockOut (กดเพื่อหยุด)</button>
+                        <p class="text-[10px] text-slate-400 text-center mt-1">⚡ ระบบเริ่มนับเวลาอัตโนมัติตั้งแต่ล็อกอิน ต้องกด " ClockOut " เองเท่านั้น</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <div class="lg:col-span-7 bg-blue-50 rounded-2xl border border-blue-200 shadow-sm p-6 flex flex-col">
+                        <h2 class="font-bold text-sm border-b border-blue-200 pb-3 mb-4 text-slate-800"><i class="fas fa-tasks text-blue-500 mr-2"></i> ภารกิจวันนี้ (My Tasks)</h2>
+                        <div class="bg-white p-4 rounded-xl border border-blue-200 mb-4 space-y-3 shadow-inner">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-[11px] font-bold text-slate-500 block mb-1">โครงการหลัก</label>
+                                    <select id="activeProjectSelect" class="w-full p-2.5 text-xs border border-slate-300 rounded-lg outline-none bg-white focus:border-indigo-500" onchange="updateSubTaskDropdown()">
+                                        <option value="งานทั่วไป"> เพิ่มชิ้นงานด้วยตนเอง </option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-[11px] font-bold text-slate-500 block mb-1">เช็คลิสต์งานย่อย</label>
+                                    <select id="activeSubTaskSelect" class="w-full p-2.5 text-xs border border-slate-300 rounded-lg outline-none bg-white focus:border-indigo-500">
+                                        <option value="">-- ระบุชื่องานเองด้านล่าง --</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="flex gap-2 items-center pt-1">
+                                <input type="text" id="newTaskNameInput" placeholder="พิมพ์ชื่องาน..." class="flex-1 p-2.5 text-xs border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                                <input type="date" id="newTaskDeadlineInput" class="w-1/3 p-2.5 text-xs border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                                <button onclick="addTaskIntoList()" class="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2.5 rounded-lg text-xs shadow-md transition">เพิ่มภารกิจ</button>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto max-h-64 hide-scroll flex-1 border border-blue-100 rounded-xl">
+                            <table class="w-full text-left text-xs">
+                                <thead class="bg-white sticky top-0 border-b border-blue-200 text-slate-600">
+                                    <tr><th class="p-3">ชื่องาน (แหล่งที่มา)</th><th class="p-3 text-center">Deadline</th><th class="p-3 text-center">เวลาสะสม</th><th class="p-3 text-center">ตัวจับเวลา</th><th class="p-3 text-center">นำส่ง</th></tr>
+                                </thead>
+                                <tbody id="myTaskTableBody" class="divide-y divide-blue-100 bg-white text-slate-700"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-5 bg-amber-50 rounded-2xl border border-amber-200 shadow-sm p-6 flex flex-col">
+                        <h2 class="font-bold text-sm border-b border-amber-200 pb-3 mb-4 text-slate-800"><i class="fas fa-folder-open text-amber-500 mr-2"></i> สถานะโครงการ</h2>
+                        <div id="staffProjectVault" class="space-y-3 overflow-y-auto max-h-48 hide-scroll p-1"></div>
+                        <div id="projectChecklistBox" class="hidden bg-white p-4 rounded-xl border border-amber-200 mt-4 flex-1 overflow-y-auto max-h-40 hide-scroll shadow-inner">
+                            <h3 class="text-xs font-bold border-b border-slate-200 pb-2 mb-2 text-slate-700">งานย่อยใน: <span id="selectedProjTitle" class="text-indigo-600"></span></h3>
+                            <div id="checklistItemsList" class="space-y-2 text-[11px]"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="md:col-span-2 bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm p-6">
+                        <h2 class="font-bold text-sm border-b border-emerald-200 pb-3 mb-4 text-slate-800"><i class="fas fa-book-reader text-emerald-500 mr-2"></i> ถอดบทเรียนการเรียนรู้</h2>
+                        <div class="space-y-3 text-xs">
+                            <select id="meetNameSelect" class="w-full p-3 border border-slate-300 rounded-xl bg-white outline-none focus:border-indigo-500" onchange="toggleCustomMeet()">
+                                <option value="Good Friday">Good Friday</option>
+                                <option value="Kosenrufu">Kosenrufu</option>
+                                <option value="อื่นๆ">อื่นๆ (ระบุชื่อประชุมด้วยตนเอง)</option>
+                            </select>
+                            <input type="text" id="meetCustomName" placeholder="ระบุชื่อการประชุม..." class="w-full p-3 border border-slate-300 rounded-xl bg-white hidden outline-none focus:border-indigo-500">
+                            <input type="date" id="meetDateInput" class="w-full p-3 border border-slate-300 rounded-xl bg-white outline-none focus:border-indigo-500">
+                            <textarea id="meetNote" placeholder="พิมพ์สิ่งที่คุณได้เรียนรู้ หรือตกผลึกจากการประชุมครั้งนี้..." class="w-full p-3 border border-slate-300 rounded-xl bg-white outline-none focus:border-indigo-500" rows="3"></textarea>
+                            <button onclick="submitMeetingLessonForm()" id="btnSubmitLesson" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl shadow-md transition">ส่งถอดบทเรียน</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm p-6 flex flex-col justify-center items-center text-center space-y-3">
+                        <div class="w-14 h-14 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center text-2xl mb-1 shadow-inner"><i class="far fa-comments"></i></div>
+                        <h3 class="font-bold text-sm text-slate-800">ติดต่อผู้บริหาร</h3>
+                        <p class="text-[10px] text-slate-500 mb-2">ส่งคำถามหรือขอนัดหมาย</p>
+                        <div class="flex flex-col gap-2 w-full mt-auto">
+                            <div class="grid grid-cols-2 gap-2">
+                                <button onclick="openModal('staffQuestionModal')" class="bg-amber-100 hover:bg-amber-200 text-amber-700 font-bold py-2 rounded-lg text-xs transition">❓ ส่งคำถาม</button>
+                                <button onclick="openModal('meetingRequestModal')" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold py-2 rounded-lg text-xs transition">📅 ขอนัดหมาย</button>
+                            </div>
+                            <button onclick="openStaffInbox()" class="relative bg-slate-800 hover:bg-slate-700 text-white font-bold py-2.5 rounded-lg text-xs transition shadow-md mt-1">
+                                📥 กล่องข้อความ
+                                <span id="inboxNotiBadge" class="hidden absolute -top-2 -right-2 bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] shadow-sm"></span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="noteCardBox" class="bg-purple-50 rounded-2xl border border-purple-200 shadow-sm p-6 flex flex-col justify-center items-center text-center space-y-3">
+                        <div class="w-14 h-14 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-2xl mb-1 shadow-inner"><i class="fas fa-file-signature"></i></div>
+                        <h3 class="font-bold text-sm text-slate-800">บันทึกข้อความ</h3>
+                        <p class="text-[10px] text-slate-500 mb-2">ส่งบันทึกข้อความ หรือรายงานการปฏิบัติการ</p>
+                        <button onclick="openModal('sendNoteModal')" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 rounded-lg text-xs mt-auto shadow-md transition">✉️ ส่งบันทึกข้อความของฝ่าย</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="submitTaskModal" class="hidden fixed inset-0 bg-slate-900/60 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto hide-scroll">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-cloud-upload-alt text-blue-500 mr-2"></i> นำส่งผลงานเข้าระบบ</h3>
+                <button onclick="closeModal('submitTaskModal')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <span class="font-bold text-slate-400 block text-[10px] uppercase mb-1">งานที่กำลังจัดส่ง:</span>
+                    <div id="modalTaskName" class="font-bold text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200">...</div>
+                    <div id="modalTimeSpentDisplay" class="mt-2 font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 p-2.5 rounded-lg text-center"></div>
+                    <input type="hidden" id="modalTaskDeadline"><input type="hidden" id="modalTaskProj">
+                </div>
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">📁 อัปโหลดไฟล์ผลงาน (ระบบจะส่งเข้า Drive)</label>
+                    <input type="file" id="taskFileInput" class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">Tag ความสำคัญ</label>
+                    <select id="taskTag" class="w-full p-2 border border-slate-300 rounded-lg outline-none">
+                        <option value="ทั่วไป">📝 งานทั่วไป</option>
+                        <option value="สำคัญ">⭐ สำคัญ</option>
+                        <option value="งานด่วน">🔥 ด่วนมาก</option>
+                        <option value="รอข้อมูลเพิ่มเติม">⏸️ รอข้อมูลเพิ่มเติม</option>
+                        <option value="ต้องการคำปรึกษา">🙋 ต้องการคำปรึกษา</option>
+                    </select>
+                </div>
+                <div id="submitToRoleWrap">
+                    <label class="font-bold text-indigo-700 block mb-1">ส่งให้ใครตรวจ?</label>
+                    <div id="submitToRoleInfo" class="w-full p-3 border border-indigo-300 bg-indigo-50 text-indigo-800 font-bold rounded-lg text-xs">-</div>
+                    <input type="hidden" id="submitToRole" value="รอหัวหน้าตรวจ">
+                </div>
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="font-bold text-slate-700">สำเนารับทราบ (CC)</label>
+                    </div>
+                    <select id="ccToSelect" multiple class="w-full p-2 border border-slate-300 rounded-lg outline-none h-24 text-xs" title="กด Ctrl หรือ Cmd ค้างไว้เพื่อเลือกหลายคน">
+                        <option value="">-- ไม่ระบุ --</option>
+                    </select>
+                    <p class="text-[9px] text-slate-400 mt-1">กด Ctrl (หรือ Cmd) ค้างไว้เพื่อเลือกหลายคน</p>
+                </div>
+            </div>
+            <div class="pt-3 border-t border-slate-100 flex justify-end space-x-3">
+                <button onclick="closeModal('submitTaskModal')" class="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-lg text-xs hover:bg-slate-200 transition">ยกเลิก</button>
+                <button onclick="finalizeTaskSubmission()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md transition">ยืนยันการส่งงาน</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="createProjectModal" class="hidden fixed inset-0 bg-slate-900/60 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto hide-scroll">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-folder-plus text-indigo-500 mr-2"></i> สร้างโครงการ & แจกจ่ายงาน</h3>
+                <button onclick="closeModal('createProjectModal')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="space-y-4 text-xs">
+                <div>
+                    <label class="font-bold text-slate-600 block mb-1">เลือกโครงการ</label>
+                    <select id="cpExistingProject" class="w-full p-2 border border-indigo-300 bg-indigo-50 rounded-lg outline-none focus:border-indigo-500 font-bold text-indigo-800" onchange="onCpProjectChange()">
+                        <option value="">➕ สร้างโครงการใหม่</option>
+                    </select>
+                </div>
+                <div id="cpNewProjFields" class="space-y-4">
+                    <div>
+                        <label class="font-bold text-slate-600 block mb-1">ชื่อโครงการ Master</label>
+                        <input type="text" id="cpName" placeholder="ระบุชื่อโครงการ..." class="w-full p-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-600 block mb-1">ชื่อโครงการภาษาอังกฤษ (ถ้ามี)</label>
+                        <input type="text" id="cpNameEn" placeholder="English project name (optional)..." class="w-full p-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="font-bold text-slate-600 block mb-1">กำหนดจัดกิจกรรม</label>
+                        <input type="date" id="cpDeadline" class="w-full p-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+                <div id="cpExistingSubTasksWrap" class="hidden border border-slate-200 p-3 rounded-xl bg-white">
+                    <label class="font-bold text-slate-600 block mb-2 text-[11px]">📋 งานย่อยที่มีอยู่แล้วในโครงการนี้</label>
+                    <ul id="cpExistingSubTasksList" class="space-y-1 text-[11px] max-h-32 overflow-y-auto hide-scroll"></ul>
+                </div>
+                <div class="border border-slate-200 p-4 rounded-xl bg-slate-50 shadow-inner">
+                    <label class="font-bold text-indigo-700 block mb-2 border-b border-slate-200 pb-2">เพิ่มภารกิจย่อย<span id="cpAddLabel"></span></label>
+                    <div class="flex gap-2 mb-2">
+                        <input type="text" id="cpSubTask" placeholder="ชื่องานย่อย..." class="flex-1 p-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                        <input type="date" id="cpSubTaskDl" class="w-1/3 p-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500" title="กำหนดส่งงานย่อย (ถ้ามี)">
+                    </div>
+                    <div class="flex gap-2">
+                        <select id="cpAssignee" class="flex-1 p-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500"></select>
+                        <button onclick="addMockSubTask()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 rounded-lg font-bold transition">เพิ่ม</button>
+                    </div>
+                    <ul id="cpSubTaskList" class="mt-3 space-y-1.5 max-h-24 overflow-y-auto hide-scroll text-[11px]"></ul>
+                </div>
+            </div>
+            <div class="pt-3 border-t border-slate-100 flex justify-end space-x-3">
+                <button onclick="closeModal('createProjectModal')" class="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-lg text-xs hover:bg-slate-200 transition">ยกเลิก</button>
+                <button onclick="submitNewProject()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md transition">บันทึกโครงการ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="staffQuestionModal" class="hidden fixed inset-0 bg-slate-900/60 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-sm"><i class="far fa-comments text-amber-500 mr-2"></i> ถามผู้บริหาร</h3>
+                <button onclick="closeModal('staffQuestionModal')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="text-[10px] font-bold text-slate-600 mb-1 block">ส่งถึงผู้บริหารท่านใด</label>
+                    <select id="popQuestionToBoss" class="w-full p-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-amber-500"></select>
+                </div>
+                <textarea id="popQuestionText" placeholder="พิมพ์ข้อความคำถามถึงบอส..." class="w-full p-3 border border-slate-300 rounded-xl text-xs outline-none focus:border-amber-500" rows="4"></textarea>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-600 mb-1 block">ไฟล์แนบประกอบการพิจารณา</label>
+                    <input type="file" class="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] outline-none">
+                </div>
+            </div>
+            <div class="pt-2 flex justify-end space-x-2">
+                <button onclick="closeModal('staffQuestionModal')" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200 transition">ยกเลิก</button>
+                <button onclick="submitStaffAction('askQuestion')" class="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md transition">ส่งข้อความ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="meetingRequestModal" class="hidden fixed inset-0 bg-slate-900/60 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-sm"><i class="far fa-calendar-alt text-indigo-500 mr-2"></i> แบบฟอร์มขอนัดหมาย</h3>
+                <button onclick="closeModal('meetingRequestModal')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="text-[10px] font-bold text-slate-600 mb-1 block">ส่งถึงผู้บริหารท่านใด</label>
+                    <select id="reqMeetToBoss" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500"></select>
+                </div>
+                <input type="text" id="reqMeetTopic" placeholder="เรื่อง/วาระการเข้าพบ..." class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-600 mb-1 block">เวลาเริ่ม</label>
+                        <input type="datetime-local" id="reqMeetDate" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500" onchange="calculateEndTime()">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-600 mb-1 block">ระยะเวลา (นาที)</label>
+                        <input type="number" id="reqMeetDuration" min="5" step="5" placeholder="เช่น 30, 60" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500" onchange="calculateEndTime()">
+                    </div>
+                </div>
+                <div class="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 p-2 rounded-lg" id="reqMeetEndDisplay">เวลาสิ้นสุดโดยประมาณ: -</div>
+                <input type="text" id="reqMeetLoc" placeholder="สถานที่ประชุม / ลิงก์ออนไลน์..." class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                <div>
+                    <label class="text-[10px] font-bold text-slate-600 block mb-1">ไฟล์เอกสารประกอบวาระ</label>
+                    <input type="file" class="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] outline-none">
+                </div>
+            </div>
+            <div class="pt-2 flex justify-end space-x-2">
+                <button onclick="closeModal('meetingRequestModal')" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200 transition">ยกเลิก</button>
+                <button onclick="submitStaffAction('reqMeeting')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md transition">ส่งคำขอ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sendNoteModal" class="hidden fixed inset-0 bg-slate-900/60 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-file-signature text-purple-500 mr-2"></i> สร้างบันทึกข้อความ</h3>
+                <button onclick="closeModal('sendNoteModal')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <input type="text" id="noteTopic" placeholder="หัวข้อบันทึก..." class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-purple-500">
+                <input type="text" id="noteDept" class="w-full p-2.5 border border-slate-200 rounded-lg bg-slate-100 text-slate-500 font-bold" readonly>
+                <textarea id="noteDesc" placeholder="รายละเอียดเนื้อหา..." class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-purple-500" rows="3"></textarea>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-600 block mb-1">แนบไฟล์ PDF/Word</label>
+                    <input type="file" class="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] outline-none">
+                </div>
+            </div>
+            <div class="pt-2 flex justify-end space-x-2">
+                <button onclick="closeModal('sendNoteModal')" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200 transition">ยกเลิก</button>
+                <button onclick="submitStaffAction('sendNote')" class="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md transition">ส่งบันทึกเข้าระบบ</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="userTaskModal" class="hidden fixed inset-0 bg-slate-900/60 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto hide-scroll">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-history text-indigo-500 mr-2"></i> ประวัติงาน: <span id="focusUserName" class="text-indigo-600 font-bold"></span></h3>
+                <button onclick="closeModal('userTaskModal')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <div class="flex gap-2 mb-3">
+                    <button id="btnDaySumToday" onclick="renderUserDailySummary(focusUserEmail,'today')" class="flex-1 bg-indigo-600 text-white font-bold py-2 rounded-lg text-xs transition">วันนี้</button>
+                    <button id="btnDaySumYesterday" onclick="renderUserDailySummary(focusUserEmail,'yesterday')" class="flex-1 bg-slate-200 text-slate-600 font-bold py-2 rounded-lg text-xs transition">เมื่อวาน</button>
+                </div>
+                <div id="userDailySummaryBox" class="text-xs space-y-2"></div>
+            </div>
+
+            <div class="overflow-x-auto max-h-80 hide-scroll border border-slate-200 rounded-xl">
+                <table class="w-full text-left text-xs bg-white">
+                    <thead class="bg-slate-50 sticky top-0 border-b border-slate-200 text-slate-700">
+                        <tr><th class="p-3">ประเภทงาน</th><th class="p-3">รายละเอียด (โครงการ)</th><th class="p-3 text-center">ผู้รับตรวจ/CC</th><th class="p-3 text-center">กำหนดส่ง</th><th class="p-3 text-center">สถานะ</th></tr>
+                    </thead>
+                    <tbody id="userTaskTableBody" class="divide-y divide-slate-100 text-slate-600"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="orgMeetHistoryModal" class="hidden fixed inset-0 bg-slate-900/60 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-globe text-sky-500 mr-2"></i> ประวัติเข้ามีทติ้งองค์กร</h3>
+                <button onclick="closeModal('orgMeetHistoryModal')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="overflow-y-auto max-h-60 hide-scroll border border-slate-200 rounded-xl">
+                <table class="w-full text-left text-xs bg-white">
+                    <thead class="bg-slate-50 sticky top-0 border-b border-slate-200 text-slate-700">
+                        <tr><th class="p-3">ชื่อบุคลากร</th><th class="p-3 text-center">Good Friday (ล่าสุด)</th><th class="p-3 text-center">Kosenrufu (ล่าสุด)</th></tr>
+                    </thead>
+                    <tbody id="orgMeetHistoryTableBody" class="divide-y divide-slate-100 text-slate-600"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="staffInboxModal" class="hidden fixed inset-0 bg-slate-900/60 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-inbox text-blue-500 mr-2"></i> กล่องข้อความจากผู้บริหาร</h3>
+                <button onclick="closeModal('staffInboxModal')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="overflow-y-auto max-h-[60vh] hide-scroll bg-slate-50 border border-slate-200 rounded-xl p-3" id="staffInboxList"></div>
+        </div>
+    </div>
+
+    <div id="meetingEditModal" class="hidden fixed inset-0 bg-slate-900/60 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-calendar-times text-indigo-500 mr-2"></i> ขอแก้ไขนัดหมาย</h3>
+                <button onclick="closeModal('meetingEditModal')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <input type="hidden" id="meEditRowId">
+                <div class="bg-slate-50 border border-slate-200 p-2.5 rounded-lg text-slate-500" id="meEditOriginalInfo">รายละเอียดนัดเดิม...</div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-600 mb-1 block">เวลาใหม่ที่ขอ</label>
+                        <input type="datetime-local" id="meEditNewTime" class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-600 mb-1 block">สถานที่ใหม่ (ถ้ามี)</label>
+                        <input type="text" id="meEditNewLoc" placeholder="ระบุ..." class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+                <textarea id="meEditReason" placeholder="เหตุผล/หมายเหตุถึงผู้นัด..." class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500" rows="2"></textarea>
+            </div>
+            <div class="pt-2 flex justify-end space-x-2">
+                <button onclick="closeModal('meetingEditModal')" class="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-200 transition">ยกเลิก</button>
+                <button onclick="submitMeetingEditRequest()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-xs font-bold shadow-md transition">ส่งคำขอแก้ไขเวลา</button>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>
