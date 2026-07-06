@@ -1,5 +1,5 @@
 // --- 1. CONFIG & STATE ---
-const API_URL = 'https://script.google.com/macros/s/AKfycbwHf94EZjQpGpCv94LDIlGCK38oebSLR-KyzT55mbm1BI3S01EFl2L4YW5NgU2p60XckQ/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbx0YTwSW18OqvMTzX4ggKdtwH-z2j9jK-Ol65uw3uBWCorE7jQJMe-kyRboWZHqK8kZFg/exec';
 
 let dbUsers = [], allTasks = [], allAtt = [], allMsgs = [], allMeets = [], allReqs = [], allNotes = [], allTimeLogs = [], allProjects = [];
 let currentUser = null, curSubmitId = null, myTaskCounter = 0;
@@ -342,7 +342,7 @@ function renderBossBoxes() {
         let toLabel = (m.to && m.to !== 'ALL') ? ` <span class="text-[9px] text-amber-500">(ถึงคุณโดยเฉพาะ)</span>` : ` <span class="text-[9px] text-slate-400">(ถึงผู้บริหารทั้งสองท่าน)</span>`;
         msgHtml += `<div class="bg-white p-3 border border-amber-200 rounded-xl"><span class="font-bold text-[11px] text-amber-800 block mb-1">${m.name} <span class="font-normal text-[9px] text-amber-600">(${m.email})</span>${toLabel}</span><p class="text-[11px] text-slate-700 my-2 bg-amber-50 p-2 rounded border border-amber-100">${m.text}</p><input type="text" id="ans_${m.id}" placeholder="พิมพ์ข้อความตอบกลับ..." class="w-full p-2 text-[10px] border border-amber-300 rounded-lg mb-2 outline-none focus:border-amber-500"><div class="flex gap-2"><button onclick="replyMsg('${m.id}')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">ตอบกลับ</button><button onclick="bounceMsg('${m.id}')" title="กรณีถามผิดคน/ไม่ใช่เรื่องของเรา" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">🔄 ตีกลับ</button></div></div>`;
     });
-    document.getElementById("bossQuestionBox").innerHTML = msgHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีคำถามด่วนจากทีม</div>`;
+    document.getElementById("bossQuestionBox").innerHTML = msgHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีคำถามจากทีม</div>`;
 
     let reqs = allReqs.filter(r => (!r.to || r.to === 'ALL' || r.to === currentUser.email));
     if(!showArchiveMeet) reqs = reqs.filter(r => r.status === "รอตอบ" || r.status === "รับนัด" || r.status === "ขอแก้ไขเวลา");
@@ -840,10 +840,20 @@ function showProjDetails(pName) {
 function updateSubTaskDropdown() {
     let p = document.getElementById("activeProjectSelect").value;
     let sub = document.getElementById("activeSubTaskSelect"); 
-    sub.innerHTML = '<option value="">-- กำหนดงานเอง --</option>';
+    
+    // 1. ล้างตัวเลือกและใส่ค่าเริ่มต้น
+    sub.innerHTML = '<option value="">-- ระบุชื่องานเองด้านล่าง --</option>';
+    
     if(p !== "งานทั่วไป") {
-        allTasks.filter(t => t.project === p && t.email === currentUser.email && t.status === 'กำลังทำ').forEach(t => { 
-            sub.innerHTML += `<option value="${t.name}">${t.name}</option>`; 
+        // 2. ดึงข้อมูลงานทั้งหมดที่อยู่ในโครงการที่เลือก
+        let projectTasks = allTasks.filter(t => t.project === p);
+        
+        // 3. กรองเอาเฉพาะชื่องานที่ไม่ซ้ำกัน (Unique) ด้วย Set
+        let uniqueTaskNames = [...new Set(projectTasks.map(t => t.name))];
+        
+        // 4. วนลูปสร้างตัวเลือก <option> ลงใน Dropdown
+        uniqueTaskNames.forEach(taskName => {
+            sub.innerHTML += `<option value="${taskName}">${taskName}</option>`;
         });
     }
 }
