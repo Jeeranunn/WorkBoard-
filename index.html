@@ -8,17 +8,18 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
    <style>
-    body { font-family: 'Sarabun', sans-serif; background-color: #f8fafc; font-size: 18px; font-weight: 500; color: #1e293b; }
+    body { font-family: 'Sarabun', sans-serif; background-color: #f8fafc; font-size: 18px; font-weight: 500; color: #1e293b; line-height: 1.6; }
     .hide-scroll::-webkit-scrollbar { display: none; }
-    .text-xs { font-size: 1rem !important; font-weight: 500; }
-    .text-sm { font-size: 1.15rem !important; }
-    .text-\[9px\]  { font-size: 0.9rem !important; font-weight: 500; }
-    .text-\[10px\] { font-size: 0.95rem !important; font-weight: 500; }
-    .text-\[11px\] { font-size: 1rem !important; font-weight: 500; }
+    .text-xs { font-size: 1rem !important; font-weight: 500; line-height: 1.6 !important; }
+    .text-sm { font-size: 1.15rem !important; line-height: 1.6 !important; }
+    .text-\[9px\]  { font-size: 0.9rem !important; font-weight: 500; line-height: 1.6 !important; }
+    .text-\[10px\] { font-size: 0.95rem !important; font-weight: 500; line-height: 1.6 !important; }
+    .text-\[11px\] { font-size: 1rem !important; font-weight: 500; line-height: 1.6 !important; }
     .text-slate-400 { color: #64748b !important; }
     .text-slate-500 { color: #475569 !important; }
     .font-bold { font-weight: 600 !important; }
     table { font-weight: 500; }
+    p, span, div, td, th, label, textarea, input, select, li { line-height: 1.6; }
     .teamFilterBtn { background:#f1f5f9; color:#64748b; }
     .teamFilterBtn.active-filter { background:#4f46e5; color:#fff; }
 </style>
@@ -54,6 +55,10 @@
             </div>
             <div class="flex items-center space-x-4">
                 <div class="text-xs font-mono text-slate-500 font-medium" id="userEmailDisplay">...</div>
+                <button onclick="openPrivateChatModal()" class="relative text-xs text-slate-700 font-bold border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition">
+                    <i class="fas fa-comment-dots mr-1"></i> แชท
+                    <span id="chatNotiBadge" class="hidden absolute -top-2 -right-2 bg-rose-500 text-white px-1.5 py-0.5 rounded-full text-[9px] shadow-sm"></span>
+                </button>
                 <button onclick="manualRefresh()" id="btnManualRefresh" class="text-xs text-indigo-600 font-bold border border-indigo-200 hover:bg-indigo-50 px-3 py-1.5 rounded-lg transition"><i class="fas fa-sync-alt mr-1"></i> รีเฟรชข้อมูล</button>
                 <button onclick="handleLogout()" class="text-xs text-rose-500 font-bold border border-rose-200 hover:bg-rose-50 px-3 py-1.5 rounded-lg transition"><i class="fas fa-sign-out-alt mr-1"></i> ออกจากระบบ</button>
             </div>
@@ -62,7 +67,6 @@
         <main class="max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6 flex-1">
             <div id="bossPanel" class="hidden space-y-6">
 
-                <!-- (1) คณะทำงาน — ยุบเหลือปุ่มใหญ่ เปิด Team Dashboard -->
                 <div class="bg-sky-50 rounded-2xl border border-sky-200 shadow-sm p-6 flex items-center justify-between">
                     <div>
                         <h2 class="font-bold text-slate-800 text-sm"><i class="fas fa-users text-sky-500 mr-2"></i> คณะทำงาน</h2>
@@ -109,6 +113,10 @@
                         <div class="bg-indigo-50 rounded-2xl border border-indigo-200 shadow-sm p-4 flex-1 flex flex-col relative">
                             <h2 class="font-bold text-sm border-b border-indigo-200 pb-2 mb-2 text-slate-800"><i class="far fa-calendar-alt text-indigo-500 mr-2"></i> (6) ขอนัดหมาย</h2>
                             <button onclick="toggleArchiveBox('meet')" class="absolute top-3 right-3 text-[10px] bg-white border border-slate-200 px-2 py-1 rounded shadow-sm hover:bg-slate-100"><i class="fas fa-history"></i></button>
+                            <div class="grid grid-cols-2 gap-2 mb-2 text-center">
+                                <div class="bg-white border border-emerald-200 rounded-lg p-1.5"><span class="block text-[9px] text-emerald-600 font-bold">✅ นัดสำเร็จ</span><span id="kpiMeetDone" class="font-bold text-emerald-700">0</span></div>
+                                <div class="bg-white border border-amber-200 rounded-lg p-1.5"><span class="block text-[9px] text-amber-600 font-bold">⏰ ใกล้ถึง (24ชม.)</span><span id="kpiMeetSoon" class="font-bold text-amber-700">0</span></div>
+                            </div>
                             <div id="bossMeetingsBox" class="flex-1 overflow-y-auto space-y-2 hide-scroll text-xs"></div>
                         </div>
                         <div class="bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm p-4 flex-1 flex flex-col">
@@ -119,7 +127,6 @@
                 </div>
             </div>
 
-            <!-- ============ Team Dashboard (หน้าใหม่) ============ -->
             <div id="teamDashboardPage" class="hidden flex-1 flex flex-col">
                 <div class="max-w-7xl w-full mx-auto space-y-6">
 
@@ -162,14 +169,23 @@
                         <button onclick="filterTeamDash('idle')" class="teamFilterBtn text-xs font-bold px-3 py-1.5 rounded-lg" data-filter="idle">ว่างงาน</button>
                     </div>
 
-                    <div id="teamMemberGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                        <!-- JS จะ render การ์ดพนักงานแต่ละคนใส่ตรงนี้ -->
-                    </div>
+                    <div id="teamMemberGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"></div>
                 </div>
             </div>
-            <!-- ============ /Team Dashboard ============ -->
 
             <div id="staffPanel" class="hidden space-y-6">
+                <div id="peerReviewSection" class="hidden bg-fuchsia-50 border border-fuchsia-200 rounded-2xl shadow-sm p-5 space-y-3 mb-6">
+                    <div class="border-b border-fuchsia-200 pb-2">
+                        <h2 class="font-bold text-fuchsia-900 text-sm"><i class="fas fa-user-check mr-2"></i> งานที่เพื่อนร่วมงานฝากให้ช่วยตรวจก่อน</h2>
+                    </div>
+                    <div class="overflow-x-auto max-h-60 hide-scroll border border-fuchsia-100 rounded-xl">
+                        <table class="w-full text-left text-xs bg-white">
+                            <thead class="bg-fuchsia-100 text-fuchsia-900"><tr><th class="p-3">งาน (ผู้ส่ง)</th><th class="p-3 text-center">กำหนดส่ง</th><th class="p-3 text-center">จัดการ</th></tr></thead>
+                            <tbody id="peerReviewTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <div id="headReviewSection" class="hidden bg-indigo-50 border border-indigo-200 rounded-2xl shadow-sm p-5 space-y-3 mb-6">
                     <div class="flex justify-between items-center border-b border-indigo-200 pb-2">
                         <h2 class="font-bold text-indigo-900 text-sm"><i class="fas fa-clipboard-check mr-2"></i> งานรอตรวจ (<span id="headDeptName"></span>)</h2>
@@ -194,8 +210,9 @@
                         <div id="masterTimerDisplay" class="text-2xl font-mono font-bold text-emerald-400 tracking-wider">00:00:00</div>
                     </div>
                     <div class="md:col-span-4">
-                        <button onclick="masterClockOut()" id="btnClockOut" class="w-full bg-slate-100 text-slate-400 font-bold py-3 rounded-xl text-sm cursor-not-allowed transition" disabled>🔴 ClockOut (กดเพื่อหยุด)</button>
-                        <p class="text-[10px] text-slate-400 text-center mt-1">⚡ ระบบเริ่มนับเวลาอัตโนมัติตั้งแต่ล็อกอิน ต้องกด " ClockOut " เองเท่านั้น</p>
+                        <button onclick="toggleMasterClock()" id="btnClockOut" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl text-sm shadow-md transition">🔴 ClockOut (พัก/เลิกงาน)</button>
+                        <p class="text-[10px] text-slate-400 text-center mt-1">⚡ กด ClockOut ตอนพักเที่ยง แล้วกด ClockIn กลับมาทำงานต่อได้ เวลาสะสมจะไม่หายไป</p>
+                        <p id="dailySessionNote" class="text-[9px] text-emerald-600 font-bold text-center mt-1"></p>
                     </div>
                 </div>
 
@@ -300,8 +317,16 @@
                     <input type="hidden" id="modalTaskDeadline"><input type="hidden" id="modalTaskProj">
                 </div>
                 <div>
-                    <label class="font-bold text-slate-700 block mb-1">📁 อัปโหลดไฟล์ผลงาน (ระบบจะส่งเข้า Drive)</label>
-                    <input type="file" id="taskFileInput" class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                    <label class="font-bold text-slate-700 block mb-1">📁 อัปโหลดไฟล์ผลงาน (แนบได้หลายไฟล์ ทุกนามสกุล)</label>
+                    <input type="file" id="taskFileInput" multiple accept="*/*" class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">🔗 หรือวางลิงก์ผลงาน (Google Drive/Docs/อื่นๆ)</label>
+                    <input type="url" id="taskLinkInput" placeholder="https://..." class="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="font-bold text-slate-700 block mb-1">📝 คำอธิบายเพิ่มเติมตอนส่งงาน (ถ้ามี)</label>
+                    <textarea id="taskSubmitDesc" placeholder="อธิบายว่างานนี้ทำอะไรไปบ้าง / ติดขัดตรงไหน..." class="w-full p-2.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500" rows="2"></textarea>
                 </div>
                 <div>
                     <label class="font-bold text-slate-700 block mb-1">Tag ความสำคัญ</label>
@@ -315,7 +340,21 @@
                 </div>
                 <div id="submitToRoleWrap">
                     <label class="font-bold text-indigo-700 block mb-1">ส่งให้ใครตรวจ?</label>
-                    <div id="submitToRoleInfo" class="w-full p-3 border border-indigo-300 bg-indigo-50 text-indigo-800 font-bold rounded-lg text-xs">-</div>
+                    <div id="submitToRoleInfo" class="w-full p-3 border border-indigo-300 bg-indigo-50 text-indigo-800 font-bold rounded-lg text-xs mb-2">-</div>
+
+                    <div id="bossPickerWrap" class="hidden mb-2">
+                        <label class="text-[10px] font-bold text-slate-600 mb-1 block">เลือกผู้บริหารที่จะส่งถึง (สำหรับหัวหน้าฝ่าย)</label>
+                        <select id="bossPickerSelect" class="w-full p-2 border border-slate-300 rounded-lg outline-none text-xs focus:border-indigo-500">
+                            <option value="">-- ใช้ค่าเริ่มต้นด้านบน --</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] font-bold text-slate-600 mb-1 block">หรือระบุคนอื่นให้ช่วยตรวจก่อน (เลือกเป็นรายบุคคล ไม่บังคับ)</label>
+                        <select id="peerReviewerSelect" class="w-full p-2 border border-slate-300 rounded-lg outline-none text-xs focus:border-indigo-500">
+                            <option value="">-- ไม่ระบุ ส่งตามปกติ --</option>
+                        </select>
+                    </div>
                     <input type="hidden" id="submitToRole" value="รอหัวหน้าตรวจ">
                 </div>
                 <div>
@@ -372,6 +411,7 @@
                         <input type="text" id="cpSubTask" placeholder="ชื่องานย่อย..." class="flex-1 p-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500">
                         <input type="date" id="cpSubTaskDl" class="w-1/3 p-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500" title="กำหนดส่งงานย่อย (ถ้ามี)">
                     </div>
+                    <textarea id="cpSubTaskDesc" placeholder="คำอธิบายงานนี้ (ถ้ามี) เช่น ขอบเขต, จุดประสงค์..." class="w-full p-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500 mb-2" rows="2"></textarea>
                     <div class="flex gap-2">
                         <select id="cpAssignee" class="flex-1 p-2 border border-slate-300 rounded-lg outline-none focus:border-indigo-500"></select>
                         <button onclick="addMockSubTask()" class="bg-slate-800 hover:bg-slate-700 text-white px-3 rounded-lg font-bold transition">เพิ่ม</button>
@@ -397,7 +437,7 @@
                     <label class="text-[10px] font-bold text-slate-600 mb-1 block">ส่งถึงผู้บริหารท่านใด</label>
                     <select id="popQuestionToBoss" class="w-full p-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-amber-500"></select>
                 </div>
-                <textarea id="popQuestionText" placeholder="พิมพ์ข้อความคำถามถึงบอส..." class="w-full p-3 border border-slate-300 rounded-xl text-xs outline-none focus:border-amber-500" rows="4"></textarea>
+                <textarea id="popQuestionText" placeholder="พิมพ์ข้อความคำถามถึงผู้บริหาร..." class="w-full p-3 border border-slate-300 rounded-xl text-xs outline-none focus:border-amber-500" rows="4"></textarea>
                 <div>
                     <label class="text-[10px] font-bold text-slate-600 mb-1 block">ไฟล์แนบประกอบการพิจารณา</label>
                     <input type="file" class="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[10px] outline-none">
@@ -548,6 +588,27 @@
             </div>
         </div>
     </div>
+
+    <div id="privateChatModal" class="hidden fixed inset-0 bg-slate-900/60 z-[1000] flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden" style="height: 75vh;">
+            <div class="flex justify-between items-center border-b border-slate-100 p-4">
+                <h3 class="font-bold text-slate-800 text-sm"><i class="fas fa-comment-dots text-slate-600 mr-2"></i> แชทเพื่อนร่วมงาน</h3>
+                <button onclick="closeModal('privateChatModal')" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="flex h-full" style="height: calc(75vh - 60px);">
+                <div class="w-1/3 border-r border-slate-100 overflow-y-auto hide-scroll p-3" id="chatContactList"></div>
+                <div class="w-2/3 flex flex-col">
+                    <div class="p-3 border-b border-slate-100 font-bold text-xs text-slate-700" id="chatThreadTitle">เลือกผู้ติดต่อทางซ้ายมือ</div>
+                    <div class="flex-1 overflow-y-auto hide-scroll p-3" id="chatThreadBox"></div>
+                    <div class="p-3 border-t border-slate-100 flex gap-2">
+                        <input type="text" id="chatMessageInput" placeholder="พิมพ์ข้อความ..." class="flex-1 p-2.5 border border-slate-300 rounded-lg outline-none focus:border-indigo-500 text-xs" onkeydown="if(event.key==='Enter'){sendPrivateChat();}">
+                        <button onclick="sendPrivateChat()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 rounded-lg text-xs font-bold transition">ส่ง</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 <!-- นำเข้าไฟล์ JavaScript ของระบบ -->
     <script src="script.js"></script>
 </body>
