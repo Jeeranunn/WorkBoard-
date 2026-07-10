@@ -73,7 +73,32 @@ function hoursRemainingStr(deadlineStr) {
 }
 
 function cln(v) { return (v === undefined || v === null) ? '' : v.toString().trim(); }
-
+function toggleMsgText(el) {
+    el.classList.toggle('expanded');
+    let btn = el.nextElementSibling;
+    if (btn && btn.classList.contains('msg-toggle-btn')) {
+        btn.innerText = el.classList.contains('expanded') ? '▲ ย่อข้อความ' : '▼ อ่านเพิ่มเติม';
+    }
+}
+function escapeHtml(str) {
+    return (str || '').toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+function formatMsgText(text) {
+    if (!text) return '';
+    let t = text.toString().replace(/\r\n/g, '\n');
+    t = t.replace(/\n{2,}/g, '\n\n');
+    t = t.replace(/([^\n])\n([^\n])/g, '$1 $2');
+    t = t.replace(/([^\n])\n([^\n])/g, '$1 $2');
+    t = t.replace(/[ \t]{2,}/g, ' ').trim();
+    return escapeHtml(t).replace(/\n\n/g, '<br><br>');
+}
+function wrapLongText(text, uid) {
+    let formatted = formatMsgText(text);
+    return `<div class="msg-text-box" id="${uid}">${formatted}</div><span class="msg-toggle-btn" onclick="toggleMsgText(document.getElementById('${uid}'))">▼ อ่านเพิ่มเติม</span>`;
+}
 // --- 2. API & DATA FETCHING ---
 async function initApp() {
     let savedUser = localStorage.getItem('devUser');
@@ -370,7 +395,7 @@ function renderBossBoxes() {
     let msgHtml = '';
     msgs.forEach(m => {
         let toLabel = (m.to && m.to !== 'ALL') ? ` <span class="text-[9px] text-amber-500">(ถึงคุณโดยเฉพาะ)</span>` : ` <span class="text-[9px] text-slate-400">(ถึงผู้บริหารทั้งสองท่าน)</span>`;
-        msgHtml += `<div class="bg-white p-3 border border-amber-200 rounded-xl"><span class="font-bold text-[11px] text-amber-800 block mb-1">${m.name} <span class="font-normal text-[9px] text-amber-600">(${m.email})</span>${toLabel}</span><p class="text-[11px] text-slate-700 my-2 bg-amber-50 p-2 rounded border border-amber-100">${m.text}</p><input type="text" id="ans_${m.id}" placeholder="พิมพ์ข้อความตอบกลับ..." class="w-full p-2 text-[10px] border border-amber-300 rounded-lg mb-2 outline-none focus:border-amber-500"><div class="flex gap-2"><button onclick="replyMsg('${m.id}')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">ตอบกลับ</button><button onclick="bounceMsg('${m.id}')" title="กรณีถามผิดคน/ไม่ใช่เรื่องของเรา" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">🔄 ตีกลับ</button></div></div>`;
+        msgHtml += `<div class="bg-white p-3 border border-amber-200 rounded-xl"><span class="font-bold text-[11px] text-amber-800 block mb-1">${m.name} <span class="font-normal text-[9px] text-amber-600">(${m.email})</span>${toLabel}</span><div class="text-[11px] text-slate-700 my-2 bg-amber-50 p-2 rounded border border-amber-100">${wrapLongText(m.text, 'qtxt_'+m.id)}</div><input type="text" id="ans_${m.id}" placeholder="พิมพ์ข้อความตอบกลับ..." class="w-full p-2 text-[10px] border border-amber-300 rounded-lg mb-2 outline-none focus:border-amber-500"><div class="flex gap-2"><button onclick="replyMsg('${m.id}')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">ตอบกลับ</button><button onclick="bounceMsg('${m.id}')" title="กรณีถามผิดคน/ไม่ใช่เรื่องของเรา" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">🔄 ตีกลับ</button></div></div>`;
     });
     document.getElementById("bossQuestionBox").innerHTML = msgHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีคำถามจากทีม</div>`;
 
