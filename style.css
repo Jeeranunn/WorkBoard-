@@ -20,5 +20,25 @@
         p, span, div, td, th, label, textarea, input, select, li { line-height: 1.6; }
         .teamFilterBtn { background:#f1f5f9; color:#64748b; }
         .teamFilterBtn.active-filter { background:#4f46e5; color:#fff; }
+.msg-text-box {
+    white-space: normal;
+    word-break: break-word;
+    line-height: 1.7 !important;
+    max-height: 4.6em;
+    overflow: hidden;
+    position: relative;
+    transition: max-height 0.25s ease;
+}
+.msg-text-box.expanded { max-height: 2000px; }
+.msg-toggle-btn {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #b45309;
+    cursor: pointer;
+    user-select: none;
+}
+.msg-toggle-btn:hover { text-decoration: underline; }
     </style>
 </head>
