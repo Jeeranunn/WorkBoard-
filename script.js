@@ -86,14 +86,32 @@ function escapeHtml(str) {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 }
+function escapeHtml(str) {
+    return (str || '').toString()
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function linkify(escapedText) {
+    const urlRegex = /((https?:\/\/|www\.)[^\s<]+)/gi;
+    return escapedText.replace(urlRegex, function(match) {
+        let trail = '';
+        let clean = match;
+        let m = match.match(/[.,)\]]+$/);
+        if (m) { trail = m[0]; clean = match.slice(0, -trail.length); }
+        let href = clean.startsWith('http') ? clean : 'https://' + clean;
+        return `<a href="${href}" target="_blank" rel="noopener" class="text-blue-600 hover:underline break-all">${clean}</a>${trail}`;
+    });
+}
+
 function formatMsgText(text) {
     if (!text) return '';
     let t = text.toString().replace(/\r\n/g, '\n');
-    t = t.replace(/\n{2,}/g, '\n\n');
-    t = t.replace(/([^\n])\n([^\n])/g, '$1 $2');
-    t = t.replace(/([^\n])\n([^\n])/g, '$1 $2');
-    t = t.replace(/[ \t]{2,}/g, ' ').trim();
-    return escapeHtml(t).replace(/\n\n/g, '<br><br>');
+    let escaped = escapeHtml(t);
+    let linked = linkify(escaped);
+    return linked.replace(/\n/g, '<br>');
+}
 }
 function wrapLongText(text, uid) {
     let formatted = formatMsgText(text);
