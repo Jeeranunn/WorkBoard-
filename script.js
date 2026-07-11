@@ -73,6 +73,8 @@ function hoursRemainingStr(deadlineStr) {
 }
 
 function cln(v) { return (v === undefined || v === null) ? '' : v.toString().trim(); }
+
+// --- TEXT FORMATTING HELPERS (จัดรูปแบบข้อความ + ลิงก์คลิกได้ + อ่านเพิ่มเติม) ---
 function toggleMsgText(el) {
     el.classList.toggle('expanded');
     let btn = el.nextElementSibling;
@@ -80,12 +82,7 @@ function toggleMsgText(el) {
         btn.innerText = el.classList.contains('expanded') ? '▲ ย่อข้อความ' : '▼ อ่านเพิ่มเติม';
     }
 }
-function escapeHtml(str) {
-    return (str || '').toString()
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
+
 function escapeHtml(str) {
     return (str || '').toString()
         .replace(/&/g, '&amp;')
@@ -112,11 +109,12 @@ function formatMsgText(text) {
     let linked = linkify(escaped);
     return linked.replace(/\n/g, '<br>');
 }
-}
+
 function wrapLongText(text, uid) {
     let formatted = formatMsgText(text);
     return `<div class="msg-text-box" id="${uid}">${formatted}</div><span class="msg-toggle-btn" onclick="toggleMsgText(document.getElementById('${uid}'))">▼ อ่านเพิ่มเติม</span>`;
 }
+
 // --- 2. API & DATA FETCHING ---
 async function initApp() {
     let savedUser = localStorage.getItem('devUser');
@@ -300,7 +298,6 @@ function setupDropdowns() {
     });
     document.getElementById("ccToSelect").innerHTML = html;
     
-    // มอบหมายงานให้ใครก็ได้ในบริษัท ไม่จำกัดแค่คนในฝ่ายตัวเอง (ไม่รวมบอส)
     let assignHtml = '<option value="">-- เลือกผู้รับผิดชอบ --</option>';
     let staffList = dbUsers.filter(u => u.role !== 'BOSS' && u.role !== 'ADMIN');
     staffList.forEach(u => {
@@ -405,7 +402,7 @@ function renderBossBoxes() {
     notes.forEach(n => {
         let btn = showArchiveNote ? `<div class="text-emerald-600 text-[9px] mt-1 font-bold">✅ รับทราบแล้ว</div>` : `<button onclick="ackNote('${n.id}')" class="mt-2 w-full bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">กดเพื่อรับทราบ</button>`;
         let timeStr = n.sentAt ? `<span class="text-[9px] text-slate-400 block">🕒 ส่งเมื่อ: ${new Date(n.sentAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</span>` : '';
-        noteHtml += `<div class="bg-white p-3 border border-purple-200 rounded-xl"><span class="font-bold text-[11px] text-purple-800 block mb-1">${n.topic}</span><p class="text-[10px] text-slate-600">จาก: ${n.name} <span class="text-slate-400">(${n.dept})</span></p>${timeStr}${btn}</div>`;
+        noteHtml += `<div class="bg-white p-3 border border-purple-200 rounded-xl"><span class="font-bold text-[11px] text-purple-800 block mb-1">${n.topic}</span><div class="text-[10px] text-slate-600 my-1">${wrapLongText(n.topic === n.topic ? (n.desc || '') : '', 'ndesc_'+n.id)}</div><p class="text-[10px] text-slate-600">จาก: ${n.name} <span class="text-slate-400">(${n.dept})</span></p>${timeStr}${btn}</div>`;
     });
     document.getElementById("bossNotesBox").innerHTML = noteHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีบันทึกข้อความ${showArchiveNote?'เก่า':'ใหม่'}</div>`;
 
@@ -435,7 +432,7 @@ function renderBossBoxes() {
             actionArea = `<div class="text-[10px] font-bold ${r.status==='รับนัด'?'text-emerald-600':'text-rose-600'}">สถานะ: ${r.status} ${r.remark?`(${r.remark})`:''}</div>`;
         }
 
-        reqHtml += `<div class="bg-white p-3 border border-indigo-200 rounded-xl"><span class="font-bold text-[11px] text-indigo-800 block mb-1">${r.topic}${toLabel}</span><div class="text-[10px] text-slate-500 font-bold mb-1">👤 ผู้นัด: ${r.name} <span class="font-normal text-slate-400">(${r.email})</span></div><div class="text-[10px] text-slate-600 my-2 bg-indigo-50 p-2 rounded border border-indigo-100"><b class="text-slate-800">เวลา:</b> ${new Date(r.date).toLocaleString('th-TH')}${durLabel}<br><b class="text-slate-800">สถานที่:</b> ${r.loc}</div>${actionArea}</div>`;
+        reqHtml += `<div class="bg-white p-3 border border-indigo-200 rounded-xl"><span class="font-bold text-[11px] text-indigo-800 block mb-1">${r.topic}${toLabel}</span><div class="text-[10px] text-slate-500 font-bold mb-1">👤 ผู้นัด: ${r.name} <span class="font-normal text-slate-400">(${r.email})</span></div><div class="text-[10px] text-slate-600 my-2 bg-indigo-50 p-2 rounded border border-indigo-100"><b class="text-slate-800">เวลา:</b> ${new Date(r.date).toLocaleString('th-TH')}${durLabel}<br><b class="text-slate-800">สถานที่:</b> ${wrapLongText(r.loc, 'loc_'+r.id)}</div>${actionArea}</div>`;
     });
     document.getElementById("bossMeetingsBox").innerHTML = reqHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีคำขอนัดหมาย${showArchiveMeet?'เก่า':''}</div>`;
 }
@@ -1104,9 +1101,9 @@ async function openStaffInbox() {
             let isBounced = hasReply && m.reply.indexOf('🔄 [ตีกลับ') === 0;
             let isSystemNotice = m.text && m.text.indexOf('[ระบบแจ้งเตือน]') === 0;
             let replyBox = !hasReply ? `<div class="text-[10px] text-amber-500 font-bold italic"><i class="fas fa-hourglass-half"></i> รอการตอบกลับ...</div>`
-                : isBounced ? `<div class="text-xs bg-rose-50 text-rose-800 p-2.5 rounded-lg border border-rose-200"><span class="font-bold">⚠️ ผู้บริหารตีกลับ:</span> ${m.reply.replace('🔄 [ตีกลับ - กรุณาตรวจสอบผู้รับ] ','')}</div>`
-                : `<div class="text-xs bg-emerald-50 text-emerald-800 p-2.5 rounded-lg border border-emerald-100"><span class="font-bold">${isSystemNotice ? '🔔' : '✅ บอสตอบกลับ:'}</span> ${m.reply}</div>`;
-            html += `<div class="bg-white p-4 rounded-lg border ${hasReply ? (isBounced ? 'border-rose-200 shadow-md' : 'border-emerald-200 shadow-md') : 'border-slate-200 shadow-sm'} mb-3">${isSystemNotice ? '' : `<div class="text-[11px] font-bold text-slate-700 mb-2">Q: ${m.text}</div>`}${replyBox}</div>`;
+                : isBounced ? `<div class="text-xs bg-rose-50 text-rose-800 p-2.5 rounded-lg border border-rose-200"><span class="font-bold">⚠️ ผู้บริหารตีกลับ:</span> ${wrapLongText(m.reply.replace('🔄 [ตีกลับ - กรุณาตรวจสอบผู้รับ] ',''), 'replyB_'+m.id)}</div>`
+                : `<div class="text-xs bg-emerald-50 text-emerald-800 p-2.5 rounded-lg border border-emerald-100"><span class="font-bold">${isSystemNotice ? '🔔' : '✅ บอสตอบกลับ:'}</span> ${wrapLongText(m.reply, 'replyN_'+m.id)}</div>`;
+            html += `<div class="bg-white p-4 rounded-lg border ${hasReply ? (isBounced ? 'border-rose-200 shadow-md' : 'border-emerald-200 shadow-md') : 'border-slate-200 shadow-sm'} mb-3">${isSystemNotice ? '' : `<div class="text-[11px] font-bold text-slate-700 mb-2">Q: ${wrapLongText(m.text, 'q_'+m.id)}</div>`}${replyBox}</div>`;
         });
     }
 
@@ -1118,7 +1115,7 @@ async function openStaffInbox() {
             let statusIcon = r.status === "รับนัด" ? "✅" : (r.status === "ปฏิเสธ" ? "❌" : (r.status === "ขอแก้ไขเวลา" ? "✏️" : "⏳"));
             let durLabel = r.duration ? ` (~${r.duration} นาที)` : '';
             let confirmBtn = r.status === "ขอแก้ไขเวลา" ? `<button onclick="confirmMeetingNewTime('${r.id}')" class="mt-2 w-full bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">✅ ยืนยันเวลาใหม่ที่เสนอ</button>` : '';
-            html += `<div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm mb-3"><div class="text-[11px] font-bold text-slate-700 mb-1">หัวข้อ: ${r.topic}</div><div class="text-[10px] text-slate-500 mb-3">เวลาที่ขอ: ${new Date(r.date).toLocaleString('th-TH')}${durLabel}</div><div class="text-[11px] p-2.5 rounded-lg border ${statusColor}"><span class="font-bold">${statusIcon} สถานะ: ${r.status}</span>${r.remark ? `<div class="mt-2 text-[10px] bg-white p-2 rounded opacity-90"><b class="block">หมายเหตุจากบอส:</b> ${r.remark}</div>` : ''}${confirmBtn}</div></div>`;
+            html += `<div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm mb-3"><div class="text-[11px] font-bold text-slate-700 mb-1">หัวข้อ: ${r.topic}</div><div class="text-[10px] text-slate-500 mb-3">เวลาที่ขอ: ${new Date(r.date).toLocaleString('th-TH')}${durLabel}</div><div class="text-[11px] p-2.5 rounded-lg border ${statusColor}"><span class="font-bold">${statusIcon} สถานะ: ${r.status}</span>${r.remark ? `<div class="mt-2 text-[10px] bg-white p-2 rounded opacity-90"><b class="block">หมายเหตุจากบอส:</b> ${wrapLongText(r.remark, 'rmk_'+r.id)}</div>` : ''}${confirmBtn}</div></div>`;
         });
     }
     list.innerHTML = html || `<div class="text-center text-slate-400 text-xs py-8">คุณยังไม่มีประวัติการส่งคำถาม หรือขอนัดหมายผู้บริหาร</div>`;
@@ -1140,7 +1137,6 @@ function openCreateProjectModal() {
     document.getElementById("cpDeadline").value = "";
     document.getElementById("cpSubTaskDl").value = "";
 
-    // รีเฟรชรายชื่อผู้รับผิดชอบทุกครั้งที่เปิดโมดัล ให้เลือกได้ทุกคนในบริษัท ไม่จำกัดแค่ฝ่ายตัวเอง
     let assignHtml = '<option value="">-- เลือกผู้รับผิดชอบ --</option>';
     dbUsers.filter(u => u.role !== 'BOSS' && u.role !== 'ADMIN').forEach(u => {
         assignHtml += `<option value="${u.email}" data-dept="${u.dept}">${u.name} (${u.dept})</option>`;
@@ -1368,7 +1364,7 @@ function openChatWith(email) {
         let mine = c.fromEmail === currentUser.email;
         html += `<div class="flex ${mine ? 'justify-end' : 'justify-start'} mb-2">
             <div class="max-w-[75%] p-2.5 rounded-xl text-xs ${mine ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'}">
-                ${c.text}
+                ${formatMsgText(c.text)}
                 <div class="text-[9px] ${mine ? 'text-indigo-200' : 'text-slate-400'} mt-1">${new Date(c.sentAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</div>
             </div>
         </div>`;
