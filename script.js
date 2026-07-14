@@ -45,9 +45,14 @@ function parseFileLinks(fileStr) {
         try {
             let obj = JSON.parse(p);
             if(obj.error) return `<span class="text-rose-500">❌ ${obj.name} (อัปโหลดล้มเหลว)</span>`;
-            return `<a href="${obj.url}" target="_blank" class="text-blue-600 hover:underline block">📎 ${obj.name}</a>`;
+            
+            // เข้ารหัส URL ป้องกัน Error 404 เวลาเบราว์เซอร์อ่าน Path ภาษาไทย
+            let safeUrl = encodeURI(obj.url); 
+            
+            return `<a href="${safeUrl}" target="_blank" class="text-blue-600 hover:underline block break-all">📎 ${obj.name}</a>`;
         } catch(e) {
-            return `<a href="${p}" target="_blank" class="text-blue-600 hover:underline block">📎 ${p}</a>`;
+            let safeUrl = encodeURI(p);
+            return `<a href="${safeUrl}" target="_blank" class="text-blue-600 hover:underline block break-all">📎 ${p}</a>`;
         }
     }).join('');
 }
@@ -914,15 +919,19 @@ async function finalizeTaskSubmission() {
     document.querySelector('#loadingOverlay h2').innerText = "กำลังอัปโหลดไฟล์...";
 
     let filesPayload = [];
-    for (let f of files) {
-        let base64 = await new Promise((res, rej) => {
-            let reader = new FileReader();
-            reader.onload = () => res(reader.result);
-            reader.onerror = rej;
-            reader.readAsDataURL(f);
-        });
-        filesPayload.push({ name: f.name, mimeType: f.type || 'application/octet-stream', base64: base64 });
-    }
+for (let f of files) {
+    let base64 = await new Promise((res, rej) => {
+        let reader = new FileReader();
+        reader.onload = () => res(reader.result);
+        reader.onerror = rej;
+        reader.readAsDataURL(f);
+    });
+    
+    // แปลงชื่อไฟล์ภาษาไทยจาก Mac (NFD) ให้เป็นมาตรฐาน (NFC)
+    let safeFileName = f.name.normalize('NFC'); 
+    
+    filesPayload.push({ name: safeFileName, mimeType: f.type || 'application/octet-stream', base64: base64 });
+}
 
     let task = allTasks.find(x => x.id === curSubmitId);
     let submittedAtNow = new Date().toISOString();
