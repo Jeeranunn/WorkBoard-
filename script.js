@@ -1,5 +1,5 @@
 // --- 1. CONFIG & STATE ---
-const API_URL = 'https://script.google.com/macros/s/AKfycbwiqvKlFFp47E5Eksla7XoBDjM-y5XOsnB7uQZP89Beby7Uv8_lxZkB9a6ybrzq4ji1pQ/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbzpvt-bmDCCTsM15TAeHc3tjSIZ-u77eVK1iVnKb3W1U7hEX_GjBPW9lDVYEdqVQVqPew/exec';
 
 let dbUsers = [], allTasks = [], allAtt = [], allMsgs = [], allMeets = [], allReqs = [], allNotes = [], allTimeLogs = [], allProjects = [];
 let currentUser = null, curSubmitId = null, myTaskCounter = 0;
@@ -25,7 +25,6 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
-// ==== ข้อ 6: helper แสดงเวลาแบบ HH:MM:SS ====
 function fmtHMS(totalSeconds) {
     totalSeconds = Math.max(0, Math.floor(totalSeconds) || 0);
     let h = Math.floor(totalSeconds / 3600), m = Math.floor((totalSeconds % 3600) / 60), s = totalSeconds % 60;
@@ -68,7 +67,6 @@ function fmtHM(totalSeconds) {
 function todayStr() { return new Date().toLocaleDateString('en-CA'); }
 function yesterdayStr() { let d = new Date(); d.setDate(d.getDate()-1); return d.toLocaleDateString('en-CA'); }
 
-// ==== ข้อ 3: แสดงวันที่แบบอ่านง่าย แทน ISO string ดิบ ====
 function fmtDate(dateStr) {
     if (!dateStr || dateStr === '-') return '-';
     let d = new Date(dateStr);
@@ -91,26 +89,17 @@ function hoursRemainingStr(deadlineStr) {
     return `<span class="text-rose-600 font-bold">⚠️ เลยกำหนด ${Math.abs(diffH)} ชม.</span>`;
 }
 
-// ==== ข้อ 5: สำหรับงานที่ "ส่งไปแล้ว" ให้ค้างสถานะ ณ ตอนที่ส่งจริง ไม่นับเวลาต่อไปเรื่อยๆ ====
+// งานที่ "ส่งไปแล้ว" ใช้ผลตัดสินที่ backend ล็อกไว้ตอนส่งจริง (lateVerdict) ไม่คำนวณสดอีก
 function lateStatusStr(t) {
     let activeStatuses = ['กำลังทำ', 'ยังไม่เริ่มทำ'];
-    if (activeStatuses.includes(t.status)) {
-        return hoursRemainingStr(t.deadline);
-    }
-    if (!t.deadline || t.deadline === '-') return '';
-    let d = new Date(t.deadline);
-    if (isNaN(d)) return '';
-    d.setHours(LATE_HOUR, 0, 0, 0);
-    let refDate = t.submittedAt ? new Date(t.submittedAt) : new Date();
-    let diffMs = d - refDate;
-    let diffH = Math.round(diffMs / (1000*60*60));
-    if (diffH >= 0) return `<span class="text-emerald-600 font-bold">✅ ส่งทันเวลา</span>`;
-    return `<span class="text-rose-600 font-bold">⚠️ ส่งช้ากว่ากำหนด ${Math.abs(diffH)} ชม.</span>`;
+    if (activeStatuses.includes(t.status)) return hoursRemainingStr(t.deadline);
+    if (t.lateVerdict === 'late') return `<span class="text-rose-600 font-bold">⚠️ ส่งช้ากว่ากำหนด</span>`;
+    if (t.lateVerdict === 'ontime') return `<span class="text-emerald-600 font-bold">✅ ส่งทันเวลา</span>`;
+    return `<span class="text-slate-400">ไม่ทราบ (งานเก่าก่อนอัปเดตระบบ)</span>`;
 }
 
 function cln(v) { return (v === undefined || v === null) ? '' : v.toString().trim(); }
 
-// ==== ข้อ 9: toast แจ้งเตือนแบบนุ่มนวล แทน alert() สำหรับข้อความยืนยันทั่วไป ====
 function toast(msg, type='info') {
     let existing = document.getElementById('wbToast');
     if(existing) existing.remove();
@@ -123,7 +112,7 @@ function toast(msg, type='info') {
     setTimeout(() => { el.style.opacity = '0'; setTimeout(()=>el.remove(), 300); }, 2500);
 }
 
-// --- TEXT FORMATTING HELPERS (จัดรูปแบบข้อความ + ลิงก์คลิกได้ + อ่านเพิ่มเติม) ---
+// --- TEXT FORMATTING HELPERS ---
 function toggleMsgText(el) {
     el.classList.toggle('expanded');
     let btn = el.nextElementSibling;
@@ -205,23 +194,21 @@ async function initApp() {
     document.getElementById('loadingOverlay').classList.add('hidden');
     renderData();
 
-    // ==== ข้อ 6: กู้คืนสถานะ ClockIn/เวลาสะสม ให้ตรงความจริงเสมอ ไม่ว่าจะรีเฟรชหน้าเว็บหรือ login ใหม่ ====
     if(currentUser.role !== 'BOSS' && currentUser.role !== 'ADMIN') {
         resumeAttendanceState();
     }
 
-    // ==== ข้อ 9: ให้ auto-refresh ทำงานทุกครั้งไม่ว่าจะ login ใหม่ หรือแค่รีเฟรชหน้าเว็บ (เดิมทำงานเฉพาะตอน login เท่านั้น) ====
     if(autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(silentRefresh, 30000);
 }
 
 function mapAllData(responseData) {
     allAtt   = responseData.attendance.map(r => ({ id: r[0], email: cln(r[1]), name: r[2], action: cln(r[3]), time: r[4] }));
-    allTasks = responseData.tasks.map(r => ({ id: r[0], project: cln(r[1]), name: r[2], email: cln(r[3]), deadline: r[4], dept: cln(r[5]), file: r[6], cc: r[7], tag: r[8], status: cln(r[9]), feedback: r[10], timeSpent: parseInt(r[11]) || 0, taskDesc: r[12] || "", submittedAt: r[13] || "" }));
+    allTasks = responseData.tasks.map(r => ({ id: r[0], project: cln(r[1]), name: r[2], email: cln(r[3]), deadline: r[4], dept: cln(r[5]), file: r[6], cc: r[7], tag: r[8], status: cln(r[9]), feedback: r[10], timeSpent: parseInt(r[11]) || 0, taskDesc: r[12] || "", submittedAt: r[13] || "", lateVerdict: r[14] || "", editedAt: r[15] || "" }));
     allMsgs  = responseData.messages.map(r => ({ id: r[0], email: cln(r[1]), name: r[2], text: r[3], file: r[4], reply: r[5], to: cln(r[6]) || 'ALL' }));
     allMeets = responseData.meetings.map(r => ({ date: r[0], email: cln(r[1]), type: cln(r[2]), name: r[3], note: r[4] }));
     allReqs  = responseData.reqs.map(r => ({ id: r[0], email: cln(r[1]), name: r[2], topic: r[3], date: r[4], loc: r[5], status: cln(r[6]), remark: r[7], duration: r[8] || '', to: cln(r[9]) || 'ALL' }));
-    allNotes = responseData.notes.map(r => ({ id: r[0], email: cln(r[1]), name: r[2], topic: r[3], dept: cln(r[4]), status: cln(r[5]), sentAt: r[6] || '', desc: r[7] || '' }));
+    allNotes = responseData.notes.map(r => ({ id: r[0], email: cln(r[1]), name: r[2], topic: r[3], dept: cln(r[4]), status: cln(r[5]), sentAt: r[6] || '', desc: r[7] || '', link: r[8] || '' }));
     allTimeLogs = (responseData.timelogs || []).map(r => ({ id: r[0], email: cln(r[1]), name: r[2], taskId: r[3], taskName: r[4], project: r[5], date: r[6], seconds: parseInt(r[7]) || 0 }));
     allProjects = (responseData.projects || []).map(r => ({ projId: r[0], projName: cln(r[1]), projNameEn: r[7] || '', deadline: r[2], dept: cln(r[3]), ownerEmail: r[4], ownerName: r[5], createdAt: r[6] }));
 }
@@ -270,7 +257,7 @@ async function handleSecureLogin() {
             setupUI();
             setupDropdowns();
 
-            await initApp(); // initApp() จะกู้คืน masterSeconds จากประวัติ Attendance_Log วันนี้ให้แล้ว (ข้อ 6)
+            await initApp();
 
             if(currentUser.role !== 'BOSS' && currentUser.role !== 'ADMIN' && !isClockedIn) {
                 masterClockIn();
@@ -300,15 +287,19 @@ function handleLogout() {
     document.getElementById("loginPassword").value = "";
 }
 
+// ข้อ 8 (รอบล่าสุด): ข้ามการ re-render เวลากำลังพิมพ์อยู่ในช่อง input/textarea กันฟีดแบกเด้งหาย
 async function silentRefresh() {
     if(!currentUser) return;
+    let typing = document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT');
     try {
         let res = await fetch(API_URL + "?action=loadAll");
         let responseData = await res.json();
         if(responseData.status === 'success') {
             mapAllData(responseData);
-            renderData();
-            updateNotiBadges();
+            if(!typing) {
+                renderData();
+                updateNotiBadges();
+            }
         }
     } catch(e) { console.error("silentRefresh ล้มเหลว:", e); }
 }
@@ -397,24 +388,43 @@ function renderBossAttendance() {
     document.getElementById("orgMeetHistoryTableBody").innerHTML = histHTML || `<tr><td colspan="3" class="text-center p-4 text-slate-400">ไม่มีข้อมูล</td></tr>`;
 }
 
+// ข้อ 6 (รอบล่าสุด): ทำให้ปุ่มดูประวัติย้อนหลังใช้งานได้จริง (เดิมเรียก toggleView ที่ไม่เคยมีฟังก์ชัน)
+function toggleView(view) {
+    if(view === 'bossArchive') {
+        showArchiveInbox = !showArchiveInbox;
+        let btn = document.getElementById('btnBossArchive');
+        if(btn) btn.innerHTML = showArchiveInbox
+            ? '<i class="fas fa-inbox mr-1"></i> กลับไปดูงานที่รอตรวจ'
+            : '<i class="fas fa-archive mr-1"></i> ดูประวัติย้อนหลัง';
+        renderBossTasks();
+    }
+}
+
 function renderBossTasks() {
     let tb = document.getElementById("bossTasksTableBody");
-    let tasks = showArchiveInbox ? allTasks.filter(t => t.status === 'เสร็จสิ้น' || t.status === 'ส่งกลับแก้ไข') : allTasks.filter(t => t.status === 'รอผู้บริหารตรวจ' || t.status === `ส่งถึง: ${currentUser.email}`);
+    let tasks = showArchiveInbox
+      ? allTasks.filter(t => t.status === 'เสร็จสิ้น' || t.status === 'ส่งกลับแก้ไข' || t.status === 'รับทราบแล้ว')
+      : allTasks.filter(t =>
+          t.status === 'รอผู้บริหารตรวจ' ||
+          t.status === `ส่งถึง: ${currentUser.email}` ||
+          (t.status.indexOf('แจ้งให้ทราบ:') === 0 && (t.status.indexOf('รอผู้บริหารตรวจ') > -1 || t.status.indexOf(currentUser.email) > -1))
+        );
 
     if (tasks.length === 0) { tb.innerHTML = `<tr><td colspan="6" class="text-center p-6 text-slate-400">${showArchiveInbox ? 'ไม่มีประวัติงานเก่า' : 'ยอดเยี่ยม! ไม่มีงานค้างตรวจ'}</td></tr>`; return; }
 
     let html = '';
     tasks.forEach((t, i) => {
+        let isFyi = t.status.indexOf('แจ้งให้ทราบ:') === 0;
         let ccList = t.cc ? t.cc.split(',').map(e => e.trim()).filter(Boolean) : [];
         let ccNames = ccList.map(email => (dbUsers.find(u => u.email === email)?.name) || email).join(', ');
         html += `
         <tr class="border-b border-rose-100">
-            <td class="p-3 font-bold text-xs text-slate-800">${t.name} <span class="block text-[9px] text-slate-400 font-normal mt-1">📂 ${t.project}</span></td>
+            <td class="p-3 font-bold text-xs text-slate-800">${isFyi ? '📢 ' : ''}${t.name} <span class="block text-[9px] text-slate-400 font-normal mt-1">📂 ${t.project}</span></td>
             <td class="p-3 text-[10px] text-slate-600 font-bold">${t.email} <span class="block text-[9px] text-slate-400 font-normal mt-1">ฝ่าย: ${t.dept}</span></td>
             <td class="p-3 text-center text-[9px] text-slate-500">${ccNames || '-'}</td>
             <td class="p-3 text-center text-[10px] font-mono text-slate-500">${fmtDate(t.deadline)}<br>${lateStatusStr(t)}</td>
             <td class="p-3 text-center text-[10px]">${t.tag}</td>
-            <td class="p-3 text-center"><button onclick="document.getElementById('bAct_${i}').classList.toggle('hidden')" class="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-slate-200 transition">ตรวจงาน</button></td>
+            <td class="p-3 text-center"><button onclick="document.getElementById('bAct_${i}').classList.toggle('hidden')" class="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-slate-200 transition">${isFyi ? '📢 ดูรายละเอียด' : (showArchiveInbox ? 'ดูรายละเอียด' : 'ตรวจงาน')}</button></td>
         </tr>
         <tr id="bAct_${i}" class="hidden bg-slate-50">
             <td colspan="6" class="p-4 space-y-3 border-b border-slate-200 shadow-inner">
@@ -422,11 +432,25 @@ function renderBossTasks() {
                 <div class="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 inline-block px-3 py-1.5 rounded-lg">⏱️ เวลาที่ใช้ทำงานทั้งหมด: ${fmtHM(t.timeSpent)}</div>
                 ${t.taskDesc ? `<div class="text-[11px] bg-slate-50 border border-slate-200 p-2.5 rounded-lg text-slate-600"><b>📝 คำอธิบายงาน:</b> ${t.taskDesc}</div>` : ''}
                 ${t.feedback ? `<div class="text-[11px] bg-indigo-50 border border-indigo-100 text-indigo-700 p-2.5 rounded-lg"><b>💬 ความเห็น/ฟีดแบกจากหัวหน้าฝ่าย:</b> ${t.feedback}</div>` : ''}
-                <textarea id="fb_${t.id}" class="w-full p-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-indigo-500" placeholder="พิมพ์ฟีดแบกตอบกลับ (ถ้ามี)..."></textarea>
-                <div class="flex justify-end space-x-2">
-                    <button onclick="doReview('${t.id}','ส่งกลับแก้ไข')" class="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">ตีกลับให้แก้ไข</button>
-                    <button onclick="doReview('${t.id}','เสร็จสิ้น')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">อนุมัติผ่าน (เสร็จสิ้น)</button>
-                </div>
+                ${showArchiveInbox ? `
+                    <div class="text-[11px] font-bold ${t.status==='เสร็จสิ้น' ? 'text-emerald-600' : (t.status==='รับทราบแล้ว' ? 'text-sky-600' : 'text-rose-600')}">📌 สถานะสุดท้าย: ${t.status}</div>
+                    <div class="flex justify-end">
+                        <button onclick="deleteTaskConfirm('${t.id}')" class="bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">🗑️ ลบงานนี้ออกจากระบบ</button>
+                    </div>
+                ` : isFyi ? `
+                    <div class="text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-100 inline-block px-3 py-1.5 rounded-lg">📢 งานนี้ส่งมาเพื่อแจ้งให้ทราบเท่านั้น ไม่ต้องตรวจ</div>
+                    <div class="flex justify-end space-x-2">
+                        <button onclick="deleteTaskConfirm('${t.id}')" class="bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">🗑️ ลบ</button>
+                        <button onclick="ackTaskFyi('${t.id}')" class="bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">✅ รับทราบแล้ว</button>
+                    </div>
+                ` : `
+                    <textarea id="fb_${t.id}" class="w-full p-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-indigo-500" placeholder="พิมพ์ฟีดแบกตอบกลับ (ถ้ามี)..."></textarea>
+                    <div class="flex justify-end space-x-2">
+                        <button onclick="deleteTaskConfirm('${t.id}')" class="bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">🗑️ ลบ</button>
+                        <button onclick="doReview('${t.id}','ส่งกลับแก้ไข')" class="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">ตีกลับให้แก้ไข</button>
+                        <button onclick="doReview('${t.id}','เสร็จสิ้น')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">อนุมัติผ่าน (เสร็จสิ้น)</button>
+                    </div>
+                `}
             </td>
         </tr>`;
     });
@@ -453,7 +477,7 @@ function renderBossBoxes() {
     notes.forEach(n => {
         let btn = showArchiveNote ? `<div class="text-emerald-600 text-[9px] mt-1 font-bold">✅ รับทราบแล้ว</div>` : `<button onclick="ackNote('${n.id}')" class="mt-2 w-full bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">กดเพื่อรับทราบ</button>`;
         let timeStr = n.sentAt ? `<span class="text-[9px] text-slate-400 block">🕒 ส่งเมื่อ: ${new Date(n.sentAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</span>` : '';
-        noteHtml += `<div class="bg-white p-3 border border-purple-200 rounded-xl"><span class="font-bold text-[11px] text-purple-800 block mb-1">${n.topic}</span>${n.desc ? `<div class="text-[10px] text-slate-600 my-1">${wrapLongText(n.desc, 'ndesc_'+n.id)}</div>` : ''}<p class="text-[10px] text-slate-600">จาก: ${n.name} <span class="text-slate-400">(${n.dept})</span></p>${timeStr}${btn}</div>`;
+        noteHtml += `<div class="bg-white p-3 border border-purple-200 rounded-xl"><span class="font-bold text-[11px] text-purple-800 block mb-1">${n.topic}</span>${n.desc ? `<div class="text-[10px] text-slate-600 my-1">${wrapLongText(n.desc, 'ndesc_'+n.id)}</div>` : ''}${n.link ? `<a href="${n.link}" target="_blank" class="text-purple-600 hover:underline text-[10px] block mt-1">🔗 เปิดลิงก์แนบ</a>` : ''}<p class="text-[10px] text-slate-600">จาก: ${n.name} <span class="text-slate-400">(${n.dept})</span></p>${timeStr}${btn}</div>`;
     });
     document.getElementById("bossNotesBox").innerHTML = noteHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีบันทึกข้อความ${showArchiveNote?'เก่า':'ใหม่'}</div>`;
 
@@ -497,6 +521,7 @@ function renderMeetKpis() {
     let elS = document.getElementById('kpiMeetSoon'); if(elS) elS.innerText = soon;
 }
 
+// ข้อ 2+3 (รอบล่าสุด): กรอง dropdown เฉพาะโครงการของตนเอง + เพิ่มปุ่มแก้ไข/ลบโครงการ
 function renderProjectBars() {
     let pMap = {};
     (allProjects || []).forEach(p => {
@@ -531,6 +556,7 @@ function renderProjectBars() {
 
     let vBox = document.getElementById("staffProjectVault");
     if(vBox && currentUser.role !== "BOSS" && currentUser.role !== "ADMIN") {
+        let myProjectKeys = [];
         let vHtml = "";
         for(let k in pMap) {
             let projMeta = allProjects.find(p => p.projName === k);
@@ -538,10 +564,16 @@ function renderProjectBars() {
             let iHaveTaskHere = allTasks.some(t => t.project === k && t.email === currentUser.email);
             let sameDept = pMap[k].dept === currentUser.dept;
             if(!iAmOwner && !iHaveTaskHere && !sameDept) continue;
+            myProjectKeys.push(k);
 
             let pct = pMap[k].total > 0 ? Math.floor((pMap[k].done / pMap[k].total)*100) : 0;
             let stat = pMap[k].late ? '<span class="bg-rose-100 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-lg text-[9px] font-bold">LATE 🔴</span>' : '<span class="bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-lg text-[9px] font-bold">ON-TIME ✅</span>';
-            vHtml += `<div class="border border-amber-200 bg-white p-4 rounded-xl hover:bg-amber-50 cursor-pointer shadow-sm transition" onclick="showProjDetails('${k}')"><div class="flex justify-between mb-3"><h3 class="font-bold text-xs text-slate-800">🏆 ${k} <span class="text-[10px] text-slate-400 font-mono ml-1">(DL: ${fmtDate(pMap[k].dl)})</span></h3>${stat}</div><div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div class="${pMap[k].late?'bg-rose-500':'bg-indigo-500'} h-full transition-all" style="width:${pct}%"></div></div></div>`;
+            let canManage = iAmOwner || (currentUser.role === 'HEAD' && sameDept);
+            let manageBtns = canManage && projMeta ? `<div class="flex gap-1 mt-2" onclick="event.stopPropagation()">
+                <button onclick="editProject('${projMeta.projId}')" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[9px] font-bold py-1 rounded">✏️ แก้ไข</button>
+                <button onclick="deleteProject('${projMeta.projId}')" class="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-[9px] font-bold py-1 rounded">🗑️ ลบ</button>
+            </div>` : '';
+            vHtml += `<div class="border border-amber-200 bg-white p-4 rounded-xl hover:bg-amber-50 cursor-pointer shadow-sm transition" onclick="showProjDetails('${k}')"><div class="flex justify-between mb-3"><h3 class="font-bold text-xs text-slate-800">🏆 ${k} <span class="text-[10px] text-slate-400 font-mono ml-1">(DL: ${fmtDate(pMap[k].dl)})</span></h3>${stat}</div><div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div class="${pMap[k].late?'bg-rose-500':'bg-indigo-500'} h-full transition-all" style="width:${pct}%"></div></div>${manageBtns}</div>`;
         }
         vBox.innerHTML = vHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีโครงการในคลัง</div>`;
 
@@ -549,8 +581,8 @@ function renderProjectBars() {
         if(sel) {
             let oldVal = sel.value;
             sel.innerHTML = '<option value="งานทั่วไป">เพิ่มชิ้นงานด้วยตนเอง</option>';
-            for(let k in pMap) sel.innerHTML += `<option value="${k}">🏆 ${k}</option>`;
-            if(pMap[oldVal] || oldVal === "งานทั่วไป") sel.value = oldVal;
+            myProjectKeys.forEach(k => sel.innerHTML += `<option value="${k}">🏆 ${k}</option>`);
+            if(myProjectKeys.includes(oldVal) || oldVal === "งานทั่วไป") sel.value = oldVal;
         }
     }
 }
@@ -659,6 +691,15 @@ function doReview(id, stat) {
     }
     renderData();
     sendToSheets({action: "reviewTask", taskId: id, status: stat, feedback: fb}, false);
+}
+
+// ข้อ 7 (FYI flow): ผู้บริหาร/หัวหน้ากด "รับทราบแล้ว" สำหรับงานที่ส่งมาแบบ FYI
+function ackTaskFyi(taskId) {
+    let task = allTasks.find(x => x.id === taskId);
+    if(task) task.status = 'รับทราบแล้ว';
+    renderData();
+    sendToSheets({action: "reviewTask", taskId: taskId, status: 'รับทราบแล้ว', feedback: ''}, false);
+    toast("รับทราบเรียบร้อยแล้ว ✅", "success");
 }
 
 function notifyHeadOfApproval(task, feedback) {
@@ -775,13 +816,64 @@ function addTaskIntoList() {
     if(!t) return alert("กรุณาระบุชื่องาน หรือเลือกงานจากเช็คลิสต์");
     let newTaskId = "T_" + Date.now();
 
-    allTasks.push({ id: newTaskId, project: p, name: t, email: currentUser.email, deadline: dl || "-", dept: currentUser.dept, file: "", cc: "", tag: "", status: "ยังไม่เริ่มทำ", feedback: "", timeSpent: 0, taskDesc: "", submittedAt: "" });
+    allTasks.push({ id: newTaskId, project: p, name: t, email: currentUser.email, deadline: dl || "-", dept: currentUser.dept, file: "", cc: "", tag: "", status: "ยังไม่เริ่มทำ", feedback: "", timeSpent: 0, taskDesc: "", submittedAt: "", lateVerdict: "", editedAt: "" });
 
     document.getElementById("newTaskNameInput").value = "";
     renderData();
     sendToSheets({ action: "createTask", taskId: newTaskId, taskName: t, project: p, email: currentUser.email, deadline: dl || "-", dept: currentUser.dept, desc: "" }, false);
 }
 
+// ข้อ 3 (รอบล่าสุด): ใครแก้ไข/ลบงานย่อยได้บ้าง
+function canManageTask(t) {
+    if(currentUser.role === 'BOSS' || currentUser.role === 'ADMIN') return true;
+    if(currentUser.role === 'HEAD' && t.dept === currentUser.dept) return true;
+    return t.email === currentUser.email && (t.status === 'ยังไม่เริ่มทำ' || t.status === 'กำลังทำ');
+}
+
+function editProject(projId) {
+    let p = allProjects.find(x => x.projId === projId);
+    if(!p) return;
+    let newName = prompt("แก้ไขชื่อโครงการ:", p.projName);
+    if(newName === null) return;
+    let newDeadline = prompt("แก้ไขกำหนดส่ง (YYYY-MM-DD):", p.deadline !== '-' ? p.deadline : '');
+    if(newDeadline === null) return;
+    p.projName = newName; p.deadline = newDeadline || '-';
+    renderData();
+    sendToSheets({ action: "editProject", projId: projId, projName: newName, deadline: p.deadline, projNameEn: p.projNameEn }, false);
+    toast("แก้ไขโครงการเรียบร้อยแล้ว ✅", "success");
+}
+function deleteProject(projId) {
+    let p = allProjects.find(x => x.projId === projId);
+    if(!p) return;
+    if(!confirm(`ยืนยันลบโครงการ "${p.projName}"? (งานย่อยที่มีอยู่จะไม่ถูกลบ แต่จะไม่ผูกกับโครงการหลักอีกต่อไป)`)) return;
+    allProjects = allProjects.filter(x => x.projId !== projId);
+    renderData();
+    sendToSheets({ action: "deleteProject", projId: projId }, false);
+    toast("ลบโครงการเรียบร้อยแล้ว ✅", "success");
+}
+function editTask(taskId) {
+    let t = allTasks.find(x => x.id === taskId);
+    if(!t || !canManageTask(t)) return alert("คุณไม่มีสิทธิ์แก้ไขงานนี้");
+    let newName = prompt("แก้ไขชื่องาน:", t.name);
+    if(newName === null) return;
+    let newDeadline = prompt("แก้ไขกำหนดส่ง (YYYY-MM-DD):", t.deadline !== '-' ? t.deadline : '');
+    if(newDeadline === null) return;
+    t.name = newName; t.deadline = newDeadline || '-';
+    renderData();
+    sendToSheets({ action: "editTask", taskId: taskId, taskName: newName, deadline: t.deadline }, false);
+    toast("แก้ไขงานเรียบร้อยแล้ว ✅ ระบบบันทึกเวลาที่แก้ไขไว้แล้ว", "success");
+}
+function deleteTaskConfirm(taskId) {
+    let t = allTasks.find(x => x.id === taskId);
+    if(!t || !canManageTask(t)) return alert("คุณไม่มีสิทธิ์ลบงานนี้");
+    if(!confirm(`ยืนยันลบงาน "${t.name}"? ลบแล้วกู้คืนไม่ได้`)) return;
+    allTasks = allTasks.filter(x => x.id !== taskId);
+    renderData();
+    sendToSheets({ action: "deleteTask", taskId: taskId }, false);
+    toast("ลบงานเรียบร้อยแล้ว ✅", "success");
+}
+
+// ข้อ 7 (FYI flow): เช็ค checkbox แล้วแนบ prefix "แจ้งให้ทราบ:" ไว้ที่ roleToSubmit
 async function finalizeTaskSubmission() {
     let files = Array.from(document.getElementById("taskFileInput").files);
     let linkVal = document.getElementById("taskLinkInput").value.trim();
@@ -801,6 +893,11 @@ async function finalizeTaskSubmission() {
     let normalFlowIfDone = (currentUser.role === 'HEAD') ? 'รอผู้บริหารตรวจ' : 'รอหัวหน้าตรวจ';
     if(peerTarget) {
         roleToSubmit = `รอตรวจจาก: ${peerTarget} :: ถัดไป: ${normalFlowIfDone}`;
+    }
+
+    let isFyiOnly = document.getElementById("fyiOnlyCheckbox")?.checked || false;
+    if(isFyiOnly) {
+        roleToSubmit = 'แจ้งให้ทราบ: ' + roleToSubmit;
     }
 
     let spentSec = taskSeconds[curSubmitId] || 0;
@@ -842,13 +939,14 @@ async function finalizeTaskSubmission() {
         link: linkVal,
         desc: submitDesc,
         cc: ccString, tag: tag, roleToSubmit: roleToSubmit, timeSpent: spentSec,
-        name: currentUser.name, email: currentUser.email, dept: currentUser.dept // ==== ข้อ 7: ให้ backend รู้จะแจ้งเตือนอีเมลถึงใคร ====
+        name: currentUser.name, email: currentUser.email, dept: currentUser.dept
     }, false);
 
     document.getElementById('loadingOverlay').classList.add('hidden');
-    toast("ส่งงานเรียบร้อยแล้ว ✅", "success");
+    toast(isFyiOnly ? "ส่งแจ้งให้ทราบเรียบร้อยแล้ว 📢" : "ส่งงานเรียบร้อยแล้ว ✅", "success");
 }
 
+// ข้อ 7 (FYI flow): เพิ่ม link ไปกับบันทึกข้อความ
 function submitStaffAction(act) {
     if(act === 'askQuestion') {
         let txt = document.getElementById("popQuestionText").value;
@@ -874,12 +972,13 @@ function submitStaffAction(act) {
     } else if (act === 'sendNote') {
         let topic = document.getElementById("noteTopic").value;
         let desc = document.getElementById("noteDesc").value;
+        let link = document.getElementById("noteLink")?.value || '';
         if(!topic) return alert("ระบุหัวข้อบันทึก");
         let newId = "N_"+Date.now();
         let sentAt = new Date().toISOString();
-        allNotes.push({id: newId, email: currentUser.email, name: currentUser.name, topic: topic, dept: currentUser.dept, status: "ยังไม่รับทราบ", sentAt: sentAt, desc: desc});
+        allNotes.push({id: newId, email: currentUser.email, name: currentUser.name, topic: topic, dept: currentUser.dept, status: "ยังไม่รับทราบ", sentAt: sentAt, desc: desc, link: link});
         closeModal('sendNoteModal');
-        sendToSheets({action: "sendNote", noteId: newId, email: currentUser.email, name: currentUser.name, topic: topic, dept: document.getElementById("noteDept").value, sentAt: sentAt, desc: desc}, false);
+        sendToSheets({action: "sendNote", noteId: newId, email: currentUser.email, name: currentUser.name, topic: topic, dept: document.getElementById("noteDept").value, sentAt: sentAt, desc: desc, link: link}, false);
         toast("ส่งบันทึกข้อความเรียบร้อยแล้ว ✅", "success");
     }
 }
@@ -928,7 +1027,7 @@ function submitNewProject() {
         let proj = allProjects.find(x => x.projName === existingProj);
         let masterDl = proj ? proj.deadline : "-";
         mockNewProjTasks.forEach(st => {
-            allTasks.push({id: "T_" + Date.now() + Math.random(), project: existingProj, name: st.t, email: st.a, deadline: st.dl !== '-' ? st.dl : masterDl, dept: st.aDept || currentUser.dept, file: "", cc: "", tag: "โครงการหลัก", status: "ยังไม่เริ่มทำ", feedback: "", timeSpent: 0, taskDesc: st.desc || "", submittedAt: ""});
+            allTasks.push({id: "T_" + Date.now() + Math.random(), project: existingProj, name: st.t, email: st.a, deadline: st.dl !== '-' ? st.dl : masterDl, dept: st.aDept || currentUser.dept, file: "", cc: "", tag: "โครงการหลัก", status: "ยังไม่เริ่มทำ", feedback: "", timeSpent: 0, taskDesc: st.desc || "", submittedAt: "", lateVerdict: "", editedAt: ""});
         });
         renderData();
         sendToSheets({ action: "addSubTasksToProject", projName: existingProj, dept: currentUser.dept, subTasks: mockNewProjTasks }, false);
@@ -941,7 +1040,7 @@ function submitNewProject() {
         let projDept = isBoss ? 'มอบหมายโดยผู้บริหาร' : currentUser.dept;
         allProjects.push({ projId: projId, projName: p, projNameEn: pEn, deadline: dl || "-", dept: projDept, ownerEmail: currentUser.email, ownerName: currentUser.name, createdAt: new Date().toISOString() });
         mockNewProjTasks.forEach(st => {
-            allTasks.push({id: "T_" + Date.now() + Math.random(), project: p, name: st.t, email: st.a, deadline: st.dl !== '-' ? st.dl : (dl || "-"), dept: st.aDept || currentUser.dept, file: "", cc: "", tag: "โครงการหลัก", status: "ยังไม่เริ่มทำ", feedback: "", timeSpent: 0, taskDesc: st.desc || "", submittedAt: ""});
+            allTasks.push({id: "T_" + Date.now() + Math.random(), project: p, name: st.t, email: st.a, deadline: st.dl !== '-' ? st.dl : (dl || "-"), dept: st.aDept || currentUser.dept, file: "", cc: "", tag: "โครงการหลัก", status: "ยังไม่เริ่มทำ", feedback: "", timeSpent: 0, taskDesc: st.desc || "", submittedAt: "", lateVerdict: "", editedAt: ""});
         });
         renderData();
         sendToSheets({ action: "createMasterProject", projId: projId, projName: p, projNameEn: pEn, deadline: dl || "-", dept: projDept, ownerEmail: currentUser.email, ownerName: currentUser.name, subTasks: mockNewProjTasks }, false);
@@ -950,9 +1049,11 @@ function submitNewProject() {
     toast("บันทึกโครงการเรียบร้อยแล้ว ✅", "success");
 }
 
+// ข้อ 6+7 (รอบล่าสุด): renderHeadTasks รองรับงาน FYI ด้วย
 function renderHeadTasks() {
     let tb = document.getElementById("headTasksTableBody");
-    let tasks = allTasks.filter(t => t.dept === currentUser.dept && t.email !== currentUser.email && t.status === 'รอหัวหน้าตรวจ');
+    let tasks = allTasks.filter(t => t.dept === currentUser.dept && t.email !== currentUser.email &&
+        (t.status === 'รอหัวหน้าตรวจ' || t.status.indexOf('แจ้งให้ทราบ: รอหัวหน้าตรวจ') === 0));
 
     if (tasks.length === 0) { tb.innerHTML = `<tr><td colspan="3" class="text-center p-6 text-slate-400">ไม่มีงานรอตรวจจากทีม</td></tr>`; return; }
 
@@ -960,9 +1061,10 @@ function renderHeadTasks() {
 
     let html = '';
     tasks.forEach((t, i) => {
+        let isFyi = t.status.indexOf('แจ้งให้ทราบ:') === 0;
         html += `
         <tr class="border-b border-slate-100">
-            <td class="p-3 font-bold text-xs text-slate-800">${t.name} <span class="text-slate-400 font-normal block text-[9px] mt-1">ผู้ส่ง: ${t.email}</span></td>
+            <td class="p-3 font-bold text-xs text-slate-800">${isFyi ? '📢 ' : ''}${t.name} <span class="text-slate-400 font-normal block text-[9px] mt-1">ผู้ส่ง: ${t.email}</span></td>
             <td class="p-3 text-center text-[10px] font-mono text-slate-500">${fmtDate(t.deadline)}<br>${lateStatusStr(t)}</td>
             <td class="p-3 text-center"><button onclick="document.getElementById('hAct_${i}').classList.toggle('hidden')" class="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-lg font-bold text-[10px] hover:bg-slate-200 transition">พิจารณา</button></td>
         </tr>
@@ -971,16 +1073,22 @@ function renderHeadTasks() {
                 <div class="text-[11px] font-bold text-slate-700 space-y-1"><i class="fas fa-paperclip text-blue-500 mr-1"></i> ไฟล์แนบ: ${parseFileLinks(t.file)}</div>
                 <div class="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 inline-block px-3 py-1.5 rounded-lg">⏱️ เวลาที่ใช้ทำงานทั้งหมด: ${fmtHM(t.timeSpent)}</div>
                 ${t.taskDesc ? `<div class="text-[11px] bg-slate-50 border border-slate-200 p-2.5 rounded-lg text-slate-600"><b>📝 คำอธิบายงาน:</b> ${t.taskDesc}</div>` : ''}
-                <textarea id="fb_${t.id}" class="w-full p-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-indigo-500" placeholder="ฟีดแบกถึงทีมงาน (ถ้ามี)..."></textarea>
-
-                <div class="flex gap-2">
-                    <select id="headActSelect_${t.id}" class="flex-1 p-2 text-xs border border-slate-300 rounded-lg outline-none">
-                        <option value="จัดเก็บ">🗂️ ตรวจแล้วจัดเก็บ (จบที่หัวหน้า)</option>
-                        ${bossOptions}
-                        <option value="ตีกลับ">🔴 ตีกลับให้แก้ไข</option>
-                    </select>
-                    <button onclick="doHeadReview('${t.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-[10px] font-bold shadow-sm transition">บันทึกผล</button>
-                </div>
+                ${isFyi ? `
+                    <div class="text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-100 inline-block px-3 py-1.5 rounded-lg">📢 งานนี้ส่งมาเพื่อแจ้งให้ทราบเท่านั้น ไม่ต้องตรวจ</div>
+                    <div class="flex justify-end">
+                        <button onclick="ackTaskFyi('${t.id}')" class="bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">✅ รับทราบแล้ว</button>
+                    </div>
+                ` : `
+                    <textarea id="fb_${t.id}" class="w-full p-2.5 border border-slate-300 rounded-lg text-xs outline-none focus:border-indigo-500" placeholder="ฟีดแบกถึงทีมงาน (ถ้ามี)..."></textarea>
+                    <div class="flex gap-2">
+                        <select id="headActSelect_${t.id}" class="flex-1 p-2 text-xs border border-slate-300 rounded-lg outline-none">
+                            <option value="จัดเก็บ">🗂️ ตรวจแล้วจัดเก็บ (จบที่หัวหน้า)</option>
+                            ${bossOptions}
+                            <option value="ตีกลับ">🔴 ตีกลับให้แก้ไข</option>
+                        </select>
+                        <button onclick="doHeadReview('${t.id}')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-[10px] font-bold shadow-sm transition">บันทึกผล</button>
+                    </div>
+                `}
             </td>
         </tr>`;
     });
@@ -1027,6 +1135,7 @@ function doPeerReview(taskId, newStatus) {
     sendToSheets({action: "reviewTask", taskId: taskId, status: newStatus, feedback: task ? task.feedback : fb}, false);
 }
 
+// ข้อ 3 (รอบล่าสุด): เพิ่มปุ่มแก้ไข/ลบ งานย่อยของตัวเองในตารางภารกิจวันนี้
 function renderStaffTasks() {
     let tb = document.getElementById("myTaskTableBody");
     let tasks = allTasks.filter(t => t.email === currentUser.email && (t.status === 'กำลังทำ' || t.status === 'ยังไม่เริ่มทำ'));
@@ -1037,7 +1146,7 @@ function renderStaffTasks() {
         tasks.forEach(t => {
             if(taskSeconds[t.id] === undefined) taskSeconds[t.id] = t.timeSpent || 0;
             let dispSec = taskSeconds[t.id];
-            html += `<tr id="tr_${t.id}" class="border-b border-blue-100"><td class="p-3 font-bold text-xs text-slate-800 tr-task">${t.name} <span class="block text-[10px] text-slate-400 font-normal mt-1">${t.project}</span>${t.taskDesc ? `<span class="block text-[9px] text-indigo-500 font-normal mt-1">📝 ${t.taskDesc}</span>` : ''}</td><td class="p-3 text-center text-[10px] font-mono text-slate-500 tr-dl">${fmtDate(t.deadline)}<br>${hoursRemainingStr(t.deadline)}</td><td class="p-3 text-center text-[11px] font-bold text-slate-700" id="tm_${t.id}">${formatMMSS(dispSec)}</td><td class="p-3 text-center space-x-1"><button onclick="startTimer('${t.id}'); markTaskWorking('${t.id}')" id="btnS_${t.id}" class="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[9px] font-bold shadow-sm transition">▶️ เริ่มทำ</button><button onclick="pauseTimer('${t.id}')" id="btnP_${t.id}" class="hidden bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-[9px] font-bold transition">⏸️ พัก</button></td><td class="p-3 text-center"><button onclick="openSubmitModal('${t.id}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">🚀 ส่งผลงาน</button></td></tr>`;
+            html += `<tr id="tr_${t.id}" class="border-b border-blue-100"><td class="p-3 font-bold text-xs text-slate-800 tr-task">${t.name} <span class="block text-[10px] text-slate-400 font-normal mt-1">${t.project}</span>${t.taskDesc ? `<span class="block text-[9px] text-indigo-500 font-normal mt-1">📝 ${t.taskDesc}</span>` : ''}</td><td class="p-3 text-center text-[10px] font-mono text-slate-500 tr-dl">${fmtDate(t.deadline)}<br>${hoursRemainingStr(t.deadline)}</td><td class="p-3 text-center text-[11px] font-bold text-slate-700" id="tm_${t.id}">${formatMMSS(dispSec)}</td><td class="p-3 text-center space-x-1"><button onclick="startTimer('${t.id}'); markTaskWorking('${t.id}')" id="btnS_${t.id}" class="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-lg text-[9px] font-bold shadow-sm transition">▶️ เริ่มทำ</button><button onclick="pauseTimer('${t.id}')" id="btnP_${t.id}" class="hidden bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-[9px] font-bold transition">⏸️ พัก</button></td><td class="p-3 text-center space-x-1"><button onclick="openSubmitModal('${t.id}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">🚀 ส่ง</button><button onclick="editTask('${t.id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1.5 rounded-lg text-[9px] font-bold">✏️</button><button onclick="deleteTaskConfirm('${t.id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2 py-1.5 rounded-lg text-[9px] font-bold">🗑️</button></td></tr>`;
         });
         tb.innerHTML = html;
         tasks.forEach(t => {
@@ -1050,29 +1159,42 @@ function renderStaffTasks() {
     }
 }
 
-// ==== ข้อ 8: กล่องติดตามสถานะงานที่ตนเองส่งไปแล้ว ====
+// ข้อ 5 (รอบล่าสุด): กดดูรายละเอียดไฟล์/ลิงก์ของงานที่ส่งไปแล้ว
 function renderMySubmittedTasks() {
     let tb = document.getElementById("mySubmittedTableBody");
     if(!tb || !currentUser) return;
     let tasks = allTasks.filter(t => t.email === currentUser.email && t.status !== 'ยังไม่เริ่มทำ' && t.status !== 'กำลังทำ');
     tasks.sort((a,b) => new Date(b.submittedAt || 0) - new Date(a.submittedAt || 0));
-    if (tasks.length === 0) { tb.innerHTML = `<tr><td colspan="3" class="text-center p-6 text-slate-400">ยังไม่มีงานที่ส่งไป</td></tr>`; return; }
+    if (tasks.length === 0) { tb.innerHTML = `<tr><td colspan="4" class="text-center p-6 text-slate-400">ยังไม่มีงานที่ส่งไป</td></tr>`; return; }
 
     function statusLabel(s) {
         if(s === 'เสร็จสิ้น') return `<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-bold">✅ เสร็จสิ้น</span>`;
         if(s === 'ส่งกลับแก้ไข') return `<span class="bg-rose-100 text-rose-700 px-2 py-1 rounded-lg font-bold">🔴 ตีกลับให้แก้ไข</span>`;
+        if(s === 'รับทราบแล้ว') return `<span class="bg-sky-100 text-sky-700 px-2 py-1 rounded-lg font-bold">👍 รับทราบแล้ว</span>`;
+        if(s.indexOf('แจ้งให้ทราบ:') === 0) return `<span class="bg-sky-50 text-sky-600 px-2 py-1 rounded-lg font-bold">📢 รอรับทราบ</span>`;
         if(s.startsWith('รอตรวจจาก:')) return `<span class="bg-fuchsia-100 text-fuchsia-700 px-2 py-1 rounded-lg font-bold">🙋 รอเพื่อนร่วมงานตรวจก่อน</span>`;
-        if(s.startsWith('ส่งถึง:')) return `<span class="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-lg font-bold">👑 รอผู้บริหารตรวจ</span>`;
-        if(s === 'รอผู้บริหารตรวจ') return `<span class="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-lg font-bold">👑 รอผู้บริหารตรวจ</span>`;
+        if(s.startsWith('ส่งถึง:') || s === 'รอผู้บริหารตรวจ') return `<span class="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-lg font-bold">👑 รอผู้บริหารตรวจ</span>`;
         if(s === 'รอหัวหน้าตรวจ') return `<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded-lg font-bold">🧑‍💼 รอหัวหน้าฝ่ายตรวจ</span>`;
         return `<span class="bg-slate-100 text-slate-700 px-2 py-1 rounded-lg font-bold">⏳ ${s}</span>`;
     }
 
-    tb.innerHTML = tasks.map(t => `<tr class="border-b border-slate-100">
-        <td class="p-3 font-bold text-slate-800">${t.name}<span class="block text-[9px] text-slate-400 font-normal mt-1">📂 ${t.project}</span></td>
-        <td class="p-3 text-center font-mono text-slate-500">${fmtDate(t.deadline)}</td>
-        <td class="p-3 text-center">${statusLabel(t.status)}</td>
-    </tr>`).join('');
+    let html = '';
+    tasks.forEach((t, i) => {
+        html += `<tr class="border-b border-slate-100">
+            <td class="p-3 font-bold text-slate-800">${t.name}<span class="block text-[9px] text-slate-400 font-normal mt-1">📂 ${t.project}</span></td>
+            <td class="p-3 text-center font-mono text-slate-500">${fmtDate(t.deadline)}</td>
+            <td class="p-3 text-center">${statusLabel(t.status)}</td>
+            <td class="p-3 text-center"><button onclick="document.getElementById('mySub_${i}').classList.toggle('hidden')" class="bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg text-[10px] font-bold hover:bg-slate-200">ดูรายละเอียด</button></td>
+        </tr>
+        <tr id="mySub_${i}" class="hidden bg-slate-50">
+            <td colspan="4" class="p-4 space-y-2 border-b border-slate-200">
+                <div class="text-[11px] font-bold text-slate-700"><i class="fas fa-paperclip text-blue-500 mr-1"></i> ไฟล์/ลิงก์ที่ส่ง: ${parseFileLinks(t.file)}</div>
+                ${t.taskDesc ? `<div class="text-[11px] bg-white border border-slate-200 p-2 rounded-lg text-slate-600"><b>📝 คำอธิบาย:</b> ${t.taskDesc}</div>` : ''}
+                ${t.feedback ? `<div class="text-[11px] bg-indigo-50 border border-indigo-100 text-indigo-700 p-2 rounded-lg"><b>💬 ฟีดแบก:</b> ${t.feedback}</div>` : ''}
+            </td>
+        </tr>`;
+    });
+    tb.innerHTML = html;
 }
 
 function markTaskWorking(id) {
@@ -1120,19 +1242,24 @@ function updateSubTaskDropdown() {
     }
 }
 
+// ข้อ 5+6 (รอบล่าสุด): ประวัติงานของผู้ใช้ เพิ่มปุ่มดูรายละเอียดไฟล์/ลิงก์ในทุกแถว
 function openUserTaskModal(email) {
     focusUserEmail = email;
     let u = dbUsers.find(x => x.email === email) || (currentUser && email === currentUser.email ? currentUser : null);
     document.getElementById("focusUserName").innerText = u ? `${u.name} (${email})` : email;
     let tb = document.getElementById("userTaskTableBody");
     let html = '';
-    allTasks.filter(t => t.email === email).forEach(t => {
+    allTasks.filter(t => t.email === email).forEach((t, i) => {
         let timeStr = t.timeSpent ? ` <span class="text-[9px] text-indigo-500 font-bold">⏱️ ${fmtHM(t.timeSpent)}</span>` : '';
-        html += `<tr class="border-b border-slate-100"><td class="p-3 font-bold text-indigo-600"><i class="fas fa-file-alt mr-1"></i> ภารกิจ</td><td class="p-3 text-slate-800 font-bold">${t.name}${timeStr} <span class="text-[9px] text-slate-400 font-normal block mt-1">📂 ${t.project}</span></td><td class="p-3 text-[10px] text-center">${t.cc || '-'}</td><td class="p-3 text-[10px] text-center font-mono text-slate-500">${fmtDate(t.deadline)}</td><td class="p-3 text-center text-[10px]"><span class="bg-slate-100 border border-slate-200 px-2 py-1 rounded text-slate-700">${t.status}</span></td></tr>`;
+        html += `<tr class="border-b border-slate-100"><td class="p-3 font-bold text-indigo-600"><i class="fas fa-file-alt mr-1"></i> ภารกิจ</td><td class="p-3 text-slate-800 font-bold">${t.name}${timeStr} <span class="text-[9px] text-slate-400 font-normal block mt-1">📂 ${t.project}</span></td><td class="p-3 text-[10px] text-center">${t.cc || '-'}</td><td class="p-3 text-[10px] text-center font-mono text-slate-500">${fmtDate(t.deadline)}</td><td class="p-3 text-center text-[10px]"><span class="bg-slate-100 border border-slate-200 px-2 py-1 rounded text-slate-700">${t.status}</span></td><td class="p-3 text-center"><button onclick="document.getElementById('uHist_${i}').classList.toggle('hidden')" class="bg-slate-100 border border-slate-200 px-2 py-1 rounded-lg text-[9px] font-bold hover:bg-slate-200">ดู</button></td></tr>
+        <tr id="uHist_${i}" class="hidden bg-slate-50"><td colspan="6" class="p-3 space-y-1">
+            <div class="text-[11px] font-bold text-slate-700"><i class="fas fa-paperclip text-blue-500 mr-1"></i> ไฟล์/ลิงก์: ${parseFileLinks(t.file)}</div>
+            ${t.taskDesc ? `<div class="text-[11px] text-slate-600"><b>📝</b> ${t.taskDesc}</div>` : ''}
+            ${t.feedback ? `<div class="text-[11px] text-indigo-700"><b>💬 ฟีดแบก:</b> ${t.feedback}</div>` : ''}
+        </td></tr>`;
     });
-    tb.innerHTML = html || `<tr><td colspan="5" class="text-center p-4 text-slate-400">ไม่มีประวัติภารกิจ</td></tr>`;
+    tb.innerHTML = html || `<tr><td colspan="6" class="text-center p-4 text-slate-400">ไม่มีประวัติภารกิจ</td></tr>`;
 
-    // ==== ข้อ 8: ประวัติทั้งหมดที่เคยส่ง (ถอดบทเรียน / คำถาม / บันทึกข้อความ) ====
     let extraBox = document.getElementById("userExtraHistoryBox");
     if(extraBox) {
         let lessons = allMeets.filter(m => m.email === email);
@@ -1146,7 +1273,7 @@ function openUserTaskModal(email) {
         sec += questions.length ? questions.map(q => `<div class="bg-amber-50 border border-amber-100 rounded-lg p-2.5 mb-1.5 text-[11px]"><div class="text-slate-700">${escapeHtml(q.text)}</div>${q.reply ? `<div class="mt-1 text-emerald-700">↳ ${escapeHtml(q.reply)}</div>` : `<div class="mt-1 text-slate-400 italic">รอการตอบกลับ...</div>`}</div>`).join('') : `<div class="text-[11px] text-slate-400">ไม่มีข้อมูล</div>`;
         sec += `</div>`;
         sec += `<div><h4 class="font-bold text-xs text-slate-700 border-b border-slate-200 pb-2 mb-2 mt-3"><i class="fas fa-file-signature text-purple-500 mr-1"></i> บันทึกข้อความที่เคยส่ง (${notes.length})</h4>`;
-        sec += notes.length ? notes.map(n => `<div class="bg-purple-50 border border-purple-100 rounded-lg p-2.5 mb-1.5 text-[11px]"><b>${escapeHtml(n.topic)}</b> <span class="text-slate-400">(${n.status})</span></div>`).join('') : `<div class="text-[11px] text-slate-400">ไม่มีข้อมูล</div>`;
+        sec += notes.length ? notes.map(n => `<div class="bg-purple-50 border border-purple-100 rounded-lg p-2.5 mb-1.5 text-[11px]"><b>${escapeHtml(n.topic)}</b> <span class="text-slate-400">(${n.status})</span>${n.link ? ` <a href="${n.link}" target="_blank" class="text-purple-600 hover:underline">🔗 ลิงก์</a>` : ''}</div>`).join('') : `<div class="text-[11px] text-slate-400">ไม่มีข้อมูล</div>`;
         sec += `</div>`;
         extraBox.innerHTML = sec;
     }
@@ -1181,7 +1308,6 @@ function renderUserDailySummary(email, which) {
 
 function updateNotiBadges() {
     if(!currentUser || (currentUser.role === "BOSS" || currentUser.role === "ADMIN")) return;
-    // ==== ข้อ 2: นับเฉพาะรายการที่ "ยังไม่เคยเปิดดู" แทนการนับซ้ำทุกครั้งจากเงื่อนไขเดิม ====
     let seen = new Set(getSeenInboxIds());
     let msgItems = allMsgs.filter(m => m.email === currentUser.email && m.reply).map(m => 'msg_'+m.id);
     let reqItems = allReqs.filter(r => r.email === currentUser.email && r.status !== "รอตอบ").map(r => 'req_'+r.id);
@@ -1195,14 +1321,12 @@ function updateNotiBadges() {
     }
 }
 
-// ==== ข้อ 2: เก็บสถานะ "อ่านแล้ว" ไว้ใน localStorage แยกตามผู้ใช้ ====
 function getSeenInboxIds() {
     try { return JSON.parse(localStorage.getItem('seenInbox_' + currentUser.email) || '[]'); } catch(e) { return []; }
 }
 function markInboxSeen(ids) {
     let seen = new Set(getSeenInboxIds());
     ids.forEach(id => seen.add(id));
-    // จำกัดขนาดไม่ให้ localStorage บวมไม่รู้จบ เก็บแค่ 500 รายการล่าสุด
     let arr = [...seen];
     if(arr.length > 500) arr = arr.slice(arr.length - 500);
     localStorage.setItem('seenInbox_' + currentUser.email, JSON.stringify(arr));
@@ -1240,7 +1364,6 @@ function renderStaffInboxContent() {
 }
 
 async function openStaffInbox() {
-    // ==== ข้อ 2: แสดงผลจากข้อมูลที่มีอยู่ในมือทันที ไม่ต้องรอโหลดใหม่ทั้งหมดก่อน (แก้ปัญหาเปิดช้า) ====
     renderStaffInboxContent();
     openModal('staffInboxModal');
 
@@ -1249,7 +1372,6 @@ async function openStaffInbox() {
     markInboxSeen(seenIds);
     updateNotiBadges();
 
-    // รีเฟรชข้อมูลล่าสุดในพื้นหลัง แล้วอัปเดตเนื้อหาอีกครั้งแบบไม่บล็อกหน้าจอ
     await silentRefresh();
     if(!document.getElementById('staffInboxModal').classList.contains('hidden')) {
         renderStaffInboxContent();
@@ -1328,8 +1450,6 @@ function addMockSubTask() {
 }
 
 // --- 5.5 CLOCK IN/OUT ---
-
-// ==== ข้อ 6: คำนวณเวลาทำงานสะสม "จริง" จาก Attendance_Log (ClockIn/ClockOut) แทนการอิงจาก Time_Logs ====
 function computeAttendanceSecondsForDate(email, dateStr) {
     let dayAtt = allAtt.filter(a => a.email === email && new Date(a.time).toLocaleDateString('en-CA') === dateStr);
     dayAtt.sort((a,b) => new Date(a.time) - new Date(b.time));
@@ -1342,7 +1462,6 @@ function computeAttendanceSecondsForDate(email, dateStr) {
 }
 function computeTodayAttendanceSeconds(email) { return computeAttendanceSecondsForDate(email, todayStr()); }
 
-// ==== ข้อ 6: กู้คืนสถานะ ClockIn และเวลาสะสมให้ตรงความจริง ไม่ว่าจะเป็นการ login ใหม่หรือแค่รีเฟรชหน้าเว็บ ====
 function resumeAttendanceState() {
     if(!currentUser) return;
     let att = computeTodayAttendanceSeconds(currentUser.email);
@@ -1383,12 +1502,12 @@ function resumeAttendanceState() {
 function masterClockIn() {
     isClockedIn = true;
     masterSessionStart = Date.now();
-    document.getElementById("clockStatus").innerText = "🟢 Online (กำลังปฏิบัติงาน)";
+    document.getElementById("clockStatus").innerText = "🟢 ClockIn (Working)";
     document.getElementById("clockStatus").classList.remove("text-slate-800");
     document.getElementById("clockStatus").classList.add("text-emerald-600");
     let btnOut = document.getElementById("btnClockOut");
     btnOut.disabled = false;
-    btnOut.innerText = "🔴 ClockOut (พัก/เลิกงาน)";
+    btnOut.innerText = "🔴 ClockOut (Break/ClockOut)";
     btnOut.className = "w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl text-sm shadow-md transition";
     document.getElementById("timeLogged").innerText = "ClockIn ล่าสุด: " + new Date().toLocaleTimeString('th-TH');
     sendToSheets({action: "ClockIn", email: currentUser.email, name: currentUser.name, time: new Date().toISOString()}, false);
@@ -1408,12 +1527,12 @@ function masterClockOut() {
     }
     isClockedIn = false;
     masterSessionStart = null;
-    document.getElementById("clockStatus").innerText = "🔴 Offline (พัก/เลิกงานแล้ว)";
+    document.getElementById("clockStatus").innerText = "🔴 Offline (Break/ClockOut)";
     document.getElementById("clockStatus").classList.remove("text-emerald-600");
     document.getElementById("clockStatus").classList.add("text-slate-800");
     let btnOut = document.getElementById("btnClockOut");
     btnOut.disabled = false;
-    btnOut.innerText = "🟢 ClockIn (กลับมาทำงานต่อ)";
+    btnOut.innerText = "🟢 ClockIn (Working)";
     btnOut.className = "w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm shadow-md transition";
     sendToSheets({action: "ClockOut", email: currentUser.email, name: currentUser.name, time: new Date().toISOString()}, false);
     updateDailySessionNote();
@@ -1482,6 +1601,8 @@ function openSubmitModal(id) {
     document.getElementById("taskLinkInput").value = "";
     document.getElementById("taskSubmitDesc").value = "";
     document.getElementById("taskTag").value = "ทั่วไป";
+    let fyiCb = document.getElementById("fyiOnlyCheckbox");
+    if(fyiCb) fyiCb.checked = false;
 
     let ccSelect = document.getElementById("ccToSelect");
     for (let i = 0; i < ccSelect.options.length; i++) {
