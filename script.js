@@ -1,6 +1,27 @@
-// --- 1. CONFIG & STATE ---
-const API_URL = 'https://script.google.com/macros/s/AKfycbzhCtD1L2XnMYW_Lz3dayQwA-8OyvIiHYoH7yFvWKjbfx7SBHp3Ugos9Xw9QADP17B-sg/exec';
+// ==========================================
+// 1. FIREBASE CONFIG & MODULES
+// ==========================================
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { 
+  getFirestore, collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+const firebaseConfig = {
+  apiKey: "AIzaSyA_Nb_3TwoA4B_mEZEiwh0aaE0LZsVFDnQ",
+  authDomain: "ff-workboard.firebaseapp.com",
+  projectId: "ff-workboard",
+  storageBucket: "ff-workboard.firebasestorage.app",
+  messagingSenderId: "230463105207",
+  appId: "1:230463105207:web:d9e9c5089403a4b8d84532",
+  measurementId: "G-N2XESRNVZW"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// ==========================================
+// 2. STATE VARIABLES
+// ==========================================
 let dbUsers = [], allTasks = [], allAtt = [], allMsgs = [], allMeets = [], allReqs = [], allNotes = [], allTimeLogs = [], allProjects = [];
 let currentUser = null, curSubmitId = null, myTaskCounter = 0;
 let masterTimerInterval = null, masterSeconds = 0;
@@ -10,7 +31,6 @@ let showArchiveInbox = false, mockNewProjTasks = [];
 let timers = {};
 let taskSeconds = {};
 let taskStartedAt = {};
-let autoRefreshInterval = null;
 let TEAM_DASH_FILTER = 'all';
 let focusUserEmail = null;
 const LATE_HOUR = 16;
@@ -25,6 +45,9 @@ document.addEventListener('visibilitychange', () => {
     }
 });
 
+// ==========================================
+// 3. UTILITY & FORMATTING HELPERS
+// ==========================================
 function fmtHMS(totalSeconds) {
     totalSeconds = Math.max(0, Math.floor(totalSeconds) || 0);
     let h = Math.floor(totalSeconds / 3600), m = Math.floor((totalSeconds % 3600) / 60), s = totalSeconds % 60;
@@ -45,10 +68,7 @@ function parseFileLinks(fileStr) {
         try {
             let obj = JSON.parse(p);
             if(obj.error) return `<span class="text-rose-500">❌ ${obj.name} (อัปโหลดล้มเหลว)</span>`;
-            
-            // เข้ารหัส URL ป้องกัน Error 404 เวลาเบราว์เซอร์อ่าน Path ภาษาไทย
             let safeUrl = encodeURI(obj.url); 
-            
             return `<a href="${safeUrl}" target="_blank" class="text-blue-600 hover:underline block break-all">📎 ${obj.name}</a>`;
         } catch(e) {
             let safeUrl = encodeURI(p);
@@ -64,11 +84,13 @@ function isLate(deadlineStr) {
     d.setHours(LATE_HOUR, 0, 0, 0);
     return new Date() > d;
 }
+
 function fmtHM(totalSeconds) {
     totalSeconds = parseInt(totalSeconds) || 0;
     let h = Math.floor(totalSeconds / 3600), m = Math.floor((totalSeconds % 3600) / 60);
     return `${h} ชม ${m} นาที`;
 }
+
 function todayStr() { return new Date().toLocaleDateString('en-CA'); }
 function yesterdayStr() { let d = new Date(); d.setDate(d.getDate()-1); return d.toLocaleDateString('en-CA'); }
 
@@ -94,13 +116,12 @@ function hoursRemainingStr(deadlineStr) {
     return `<span class="text-rose-600 font-bold">⚠️ เลยกำหนด ${Math.abs(diffH)} ชม.</span>`;
 }
 
-// งานที่ "ส่งไปแล้ว" ใช้ผลตัดสินที่ backend ล็อกไว้ตอนส่งจริง (lateVerdict) ไม่คำนวณสดอีก
 function lateStatusStr(t) {
     let activeStatuses = ['กำลังทำ', 'ยังไม่เริ่มทำ'];
     if (activeStatuses.includes(t.status)) return hoursRemainingStr(t.deadline);
     if (t.lateVerdict === 'late') return `<span class="text-rose-600 font-bold">⚠️ ส่งช้ากว่ากำหนด</span>`;
     if (t.lateVerdict === 'ontime') return `<span class="text-emerald-600 font-bold">✅ ส่งทันเวลา</span>`;
-    return `<span class="text-slate-400">ไม่ทราบ (งานเก่าก่อนอัปเดตระบบ)</span>`;
+    return `<span class="text-slate-400">ไม่ทราบ</span>`;
 }
 
 function cln(v) { return (v === undefined || v === null) ? '' : v.toString().trim(); }
@@ -117,7 +138,6 @@ function toast(msg, type='info') {
     setTimeout(() => { el.style.opacity = '0'; setTimeout(()=>el.remove(), 300); }, 2500);
 }
 
-// --- TEXT FORMATTING HELPERS ---
 function toggleMsgText(el) {
     el.classList.toggle('expanded');
     let btn = el.nextElementSibling;
@@ -127,10 +147,7 @@ function toggleMsgText(el) {
 }
 
 function escapeHtml(str) {
-    return (str || '').toString()
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+    return (str || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function linkify(escapedText) {
@@ -148,9 +165,7 @@ function linkify(escapedText) {
 function formatMsgText(text) {
     if (!text) return '';
     let t = text.toString().replace(/\r\n/g, '\n');
-    let escaped = escapeHtml(t);
-    let linked = linkify(escaped);
-    return linked.replace(/\n/g, '<br>');
+    return linkify(escapeHtml(t)).replace(/\n/g, '<br>');
 }
 
 function wrapLongText(text, uid) {
@@ -158,7 +173,9 @@ function wrapLongText(text, uid) {
     return `<div class="msg-text-box" id="${uid}">${formatted}</div><span class="msg-toggle-btn" onclick="toggleMsgText(document.getElementById('${uid}'))">▼ อ่านเพิ่มเติม</span>`;
 }
 
-// --- 2. API & DATA FETCHING ---
+// ==========================================
+// 4. AUTHENTICATION & REALTIME SYNC
+// ==========================================
 async function initApp() {
     let savedUser = localStorage.getItem('devUser');
     let savedDb = localStorage.getItem('devDbUsers');
@@ -171,71 +188,15 @@ async function initApp() {
         document.getElementById("userEmailDisplay").innerText = currentUser.email;
         setupUI();
         setupDropdowns();
+        startListeningData();
     }
 
     if (!currentUser) {
         document.getElementById('loadingOverlay').classList.add('hidden');
         document.getElementById('loginScreen').classList.remove('hidden');
-        return;
-    }
-
-    document.getElementById('loadingOverlay').classList.remove('hidden');
-    document.querySelector('#loadingOverlay h2').innerText = "กำลังบันทึกข้อมูล...";
-
-    try {
-        let res = await fetch(API_URL + "?action=loadAll");
-        let responseData = await res.json();
-
-        if(responseData.status === 'success') {
-            mapAllData(responseData);
-        } else {
-            console.error("API ส่ง Error:", responseData);
-        }
-    } catch (e) {
-        console.error("โหลดข้อมูลล้มเหลว:", e);
-        toast("เกิดปัญหาในการดึงข้อมูลจาก Sheets", "error");
-    }
-
-    document.getElementById('loadingOverlay').classList.add('hidden');
-    renderData();
-
-    if(currentUser.role !== 'BOSS' && currentUser.role !== 'ADMIN') {
-        resumeAttendanceState();
-    }
-
-    if(autoRefreshInterval) clearInterval(autoRefreshInterval);
-    autoRefreshInterval = setInterval(silentRefresh, 30000);
-}
-
-function mapAllData(responseData) {
-    allAtt   = responseData.attendance.map(r => ({ id: r[0], email: cln(r[1]), name: r[2], action: cln(r[3]), time: r[4] }));
-    allTasks = responseData.tasks.map(r => ({ id: r[0], project: cln(r[1]), name: r[2], email: cln(r[3]), deadline: r[4], dept: cln(r[5]), file: r[6], cc: r[7], tag: r[8], status: cln(r[9]), feedback: r[10], timeSpent: parseInt(r[11]) || 0, taskDesc: r[12] || "", submittedAt: r[13] || "", lateVerdict: r[14] || "", editedAt: r[15] || "" }));
-    allMsgs  = responseData.messages.map(r => ({ id: r[0], email: cln(r[1]), name: r[2], text: r[3], file: r[4], reply: r[5], to: cln(r[6]) || 'ALL' }));
-    allMeets = responseData.meetings.map(r => ({ date: r[0], email: cln(r[1]), type: cln(r[2]), name: r[3], note: r[4] }));
-    allReqs  = responseData.reqs.map(r => ({ id: r[0], email: cln(r[1]), name: r[2], topic: r[3], date: r[4], loc: r[5], status: cln(r[6]), remark: r[7], duration: r[8] || '', to: cln(r[9]) || 'ALL' }));
-    allNotes = responseData.notes.map(r => ({ id: r[0], email: cln(r[1]), name: r[2], topic: r[3], dept: cln(r[4]), status: cln(r[5]), sentAt: r[6] || '', desc: r[7] || '', link: r[8] || '' }));
-    allTimeLogs = (responseData.timelogs || []).map(r => ({ id: r[0], email: cln(r[1]), name: r[2], taskId: r[3], taskName: r[4], project: r[5], date: r[6], seconds: parseInt(r[7]) || 0 }));
-    allProjects = (responseData.projects || []).map(r => ({ projId: r[0], projName: cln(r[1]), projNameEn: r[7] || '', deadline: r[2], dept: cln(r[3]), ownerEmail: r[4], ownerName: r[5], createdAt: r[6] }));
-}
-
-async function sendToSheets(payload, showLoading = true) {
-    if(showLoading) {
-        document.getElementById('loadingOverlay').classList.remove('hidden');
-        document.querySelector('#loadingOverlay h2').innerText = "กำลังบันทึกข้อมูล...";
-    }
-    try {
-        let res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-        let data = await res.json();
-        if (data.status !== 'success') toast("ระบบบันทึกไม่สำเร็จ: " + (data.message || "ไม่ทราบสาเหตุ"), "error");
-    } catch (e) {
-        console.error("Fetch Error:", e);
-        toast("บันทึกไม่สำเร็จ! ตรวจสอบเน็ตเวิร์ก", "error");
-    } finally {
-        if(showLoading) document.getElementById('loadingOverlay').classList.add('hidden');
     }
 }
 
-// --- 3. AUTHENTICATION & SETUP ---
 async function handleSecureLogin() {
     const e = document.getElementById("loginEmail").value.trim().toLowerCase();
     const p = document.getElementById("loginPassword").value.trim();
@@ -245,12 +206,13 @@ async function handleSecureLogin() {
     document.querySelector('#loadingOverlay h2').innerText = "กำลังตรวจสอบบัญชี...";
 
     try {
-        let res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'login', email: e, password: p }) });
-        let data = await res.json();
-
-        if (data.status === 'success') {
-            currentUser = data.user;
-            dbUsers = data.allUsersSafe.map(u => ({ email: cln(u[0]), role: cln(u[2]), name: u[3], dept: cln(u[4]) }));
+        const userDoc = await getDoc(doc(db, "users", e));
+        
+        if (userDoc.exists() && userDoc.data().password === p) {
+            currentUser = { email: e, ...userDoc.data() };
+            
+            const usersSnap = await getDocs(collection(db, "users"));
+            dbUsers = usersSnap.docs.map(d => ({ email: d.id, ...d.data() }));
 
             localStorage.setItem('devUser', JSON.stringify(currentUser));
             localStorage.setItem('devDbUsers', JSON.stringify(dbUsers));
@@ -261,21 +223,58 @@ async function handleSecureLogin() {
 
             setupUI();
             setupDropdowns();
-
-            await initApp();
+            startListeningData();
 
             if(currentUser.role !== 'BOSS' && currentUser.role !== 'ADMIN' && !isClockedIn) {
                 masterClockIn();
             }
         } else {
-            alert(data.message || "อีเมลหรือรหัสผ่านไม่ถูกต้อง!");
-            document.getElementById('loadingOverlay').classList.add('hidden');
+            alert("อีเมลหรือรหัสผ่านไม่ถูกต้อง!");
         }
     } catch (err) {
         console.error(err);
-        alert("ไม่สามารถติดต่อระบบ Login ได้");
+        alert("ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
+    } finally {
         document.getElementById('loadingOverlay').classList.add('hidden');
     }
+}
+
+function startListeningData() {
+    onSnapshot(collection(db, "tasks"), (snapshot) => {
+        allTasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderData();
+        updateNotiBadges();
+    });
+
+    onSnapshot(collection(db, "attendance"), (snapshot) => {
+        allAtt = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        if(currentUser && currentUser.role !== 'BOSS' && currentUser.role !== 'ADMIN') {
+            resumeAttendanceState();
+        }
+        renderData();
+    });
+
+    onSnapshot(collection(db, "projects"), (snapshot) => {
+        allProjects = snapshot.docs.map(d => ({ projId: d.id, ...d.data() }));
+        renderProjectBars();
+    });
+
+    onSnapshot(collection(db, "messages"), (snapshot) => {
+        allMsgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderBossBoxes();
+        updateNotiBadges();
+    });
+
+    onSnapshot(collection(db, "meetings"), (snapshot) => {
+        allReqs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderBossBoxes();
+        renderMeetKpis();
+    });
+
+    onSnapshot(collection(db, "notes"), (snapshot) => {
+        allNotes = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderBossBoxes();
+    });
 }
 
 function handleLogout() {
@@ -285,37 +284,19 @@ function handleLogout() {
     if(currentUser && currentUser.role !== 'BOSS' && currentUser.role !== 'ADMIN') masterClockOut();
     currentUser = null;
     if(masterTimerInterval) clearInterval(masterTimerInterval);
-    if(autoRefreshInterval) clearInterval(autoRefreshInterval);
     document.getElementById("appContainer").classList.add("hidden");
     document.getElementById("loginScreen").classList.remove("hidden");
     document.getElementById("loginEmail").value = "";
     document.getElementById("loginPassword").value = "";
 }
 
-// ข้อ 8 (รอบล่าสุด): ข้ามการ re-render เวลากำลังพิมพ์อยู่ในช่อง input/textarea กันฟีดแบกเด้งหาย
-async function silentRefresh() {
-    if(!currentUser) return;
-    let typing = document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT');
-    try {
-        let res = await fetch(API_URL + "?action=loadAll");
-        let responseData = await res.json();
-        if(responseData.status === 'success') {
-            mapAllData(responseData);
-            if(!typing) {
-                renderData();
-                updateNotiBadges();
-            }
-        }
-    } catch(e) { console.error("silentRefresh ล้มเหลว:", e); }
-}
 function manualRefresh() {
-    let btn = document.getElementById('btnManualRefresh');
-    if(btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-sync-alt fa-spin mr-1"></i> กำลังรีเฟรช...'; }
-    silentRefresh().finally(() => {
-        if(btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-sync-alt mr-1"></i> รีเฟรชข้อมูล'; }
-    });
+    toast("ระบบซิงค์ข้อมูล Realtime ตลอดเวลาอยู่แล้ว ✅", "info");
 }
 
+// ==========================================
+// 5. UI SETUP & RENDERING
+// ==========================================
 function setupUI() {
     document.getElementById("bossPanel").classList.add("hidden");
     document.getElementById("staffPanel").classList.add("hidden");
@@ -362,7 +343,6 @@ function populateBossSelectors() {
     ['popQuestionToBoss','reqMeetToBoss'].forEach(id => { let el = document.getElementById(id); if(el) el.innerHTML = opts; });
 }
 
-// --- 4. RENDER UI ZONE ---
 function renderData() {
     if(currentUser.role === "BOSS" || currentUser.role === "ADMIN") {
         renderBossAttendance(); renderBossTasks(); renderBossBoxes(); renderProjectBars();
@@ -386,14 +366,13 @@ function renderBossAttendance() {
     dbUsers.filter(u => u.role !== "BOSS" && u.role !== "ADMIN").forEach(u => {
         let gf = getLatestMeet(u.email, "Good Friday");
         let kr = getLatestMeet(u.email, "Kosenrufu");
-        let cellGf = gf ? `<span class="text-emerald-600 font-bold">✅ เข้า</span> <span class="text-[9px] text-slate-400">(${fmtDate(gf.date)})</span> <span class="text-blue-500 hover:underline cursor-pointer text-[9px]" onclick='alert("ถอดบทเรียน Good Friday (" + ${JSON.stringify(gf.date)} + "):\\n" + ${JSON.stringify(gf.note)})'>อ่าน</span>` : `<span class="text-rose-500 font-bold">❌ ขาด/ลา</span>`;
-        let cellKr = kr ? `<span class="text-emerald-600 font-bold">✅ เข้า</span> <span class="text-[9px] text-slate-400">(${fmtDate(kr.date)})</span> <span class="text-blue-500 hover:underline cursor-pointer text-[9px]" onclick='alert("ถอดบทเรียน Kosenrufu (" + ${JSON.stringify(kr.date)} + "):\\n" + ${JSON.stringify(kr.note)})'>อ่าน</span>` : `<span class="text-rose-500 font-bold">❌ ขาด/ลา</span>`;
+        let cellGf = gf ? `<span class="text-emerald-600 font-bold">✅ เข้า</span> <span class="text-[9px] text-slate-400">(${fmtDate(gf.date)})</span>` : `<span class="text-rose-500 font-bold">❌ ขาด/ลา</span>`;
+        let cellKr = kr ? `<span class="text-emerald-600 font-bold">✅ เข้า</span> <span class="text-[9px] text-slate-400">(${fmtDate(kr.date)})</span>` : `<span class="text-rose-500 font-bold">❌ ขาด/ลา</span>`;
         histHTML += `<tr class="border-b"><td class="p-3 font-bold text-slate-700">${u.name}</td><td class="p-3 text-center">${cellGf}</td><td class="p-3 text-center">${cellKr}</td></tr>`;
     });
     document.getElementById("orgMeetHistoryTableBody").innerHTML = histHTML || `<tr><td colspan="3" class="text-center p-4 text-slate-400">ไม่มีข้อมูล</td></tr>`;
 }
 
-// ข้อ 6 (รอบล่าสุด): ทำให้ปุ่มดูประวัติย้อนหลังใช้งานได้จริง (เดิมเรียก toggleView ที่ไม่เคยมีฟังก์ชัน)
 function toggleView(view) {
     if(view === 'bossArchive') {
         showArchiveInbox = !showArchiveInbox;
@@ -462,12 +441,6 @@ function renderBossTasks() {
     tb.innerHTML = html;
 }
 
-function toggleArchiveBox(type) {
-    if(type === 'cc') { showArchiveCc = !showArchiveCc; renderBossBoxes(); }
-    if(type === 'note') { showArchiveNote = !showArchiveNote; renderBossBoxes(); }
-    if(type === 'meet') { showArchiveMeet = !showArchiveMeet; renderBossBoxes(); }
-}
-
 function renderBossBoxes() {
     let ccs = allTasks.filter(t => t.cc && t.cc.includes(currentUser.email));
     if(!showArchiveCc) ccs = ccs.filter(t => t.status !== 'เสร็จสิ้น');
@@ -475,7 +448,7 @@ function renderBossBoxes() {
     ccs.forEach(t => {
         ccHtml += `<div class="bg-white p-3 border border-cyan-200 rounded-xl hover:shadow-sm transition"><span class="font-bold text-[11px] text-sky-600 block mb-1">${t.name}</span><div class="text-[10px] text-slate-500 font-mono">ส่งจาก: ${t.email}<br>กำหนดส่ง: ${fmtDate(t.deadline)} | <span class="font-bold text-slate-700">สถานะ: ${t.status}</span></div></div>`;
     });
-    document.getElementById("bossCcBox").innerHTML = ccHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีรายการสำเนาถึงคุณ${showArchiveCc?'':' (ที่ยังไม่เสร็จ)'}</div>`;
+    document.getElementById("bossCcBox").innerHTML = ccHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีรายการสำเนาถึงคุณ</div>`;
 
     let notes = allNotes.filter(n => showArchiveNote ? n.status === "รับทราบแล้ว" : n.status === "ยังไม่รับทราบ");
     let noteHtml = '';
@@ -484,13 +457,13 @@ function renderBossBoxes() {
         let timeStr = n.sentAt ? `<span class="text-[9px] text-slate-400 block">🕒 ส่งเมื่อ: ${new Date(n.sentAt).toLocaleString('th-TH',{dateStyle:'short',timeStyle:'short'})}</span>` : '';
         noteHtml += `<div class="bg-white p-3 border border-purple-200 rounded-xl"><span class="font-bold text-[11px] text-purple-800 block mb-1">${n.topic}</span>${n.desc ? `<div class="text-[10px] text-slate-600 my-1">${wrapLongText(n.desc, 'ndesc_'+n.id)}</div>` : ''}${n.link ? `<a href="${n.link}" target="_blank" class="text-purple-600 hover:underline text-[10px] block mt-1">🔗 เปิดลิงก์แนบ</a>` : ''}<p class="text-[10px] text-slate-600">จาก: ${n.name} <span class="text-slate-400">(${n.dept})</span></p>${timeStr}${btn}</div>`;
     });
-    document.getElementById("bossNotesBox").innerHTML = noteHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีบันทึกข้อความ${showArchiveNote?'เก่า':'ใหม่'}</div>`;
+    document.getElementById("bossNotesBox").innerHTML = noteHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีบันทึกข้อความ</div>`;
 
     let msgs = allMsgs.filter(m => !m.reply && (!m.to || m.to === 'ALL' || m.to === currentUser.email));
     let msgHtml = '';
     msgs.forEach(m => {
         let toLabel = (m.to && m.to !== 'ALL') ? ` <span class="text-[9px] text-amber-500">(ถึงคุณโดยเฉพาะ)</span>` : ` <span class="text-[9px] text-slate-400">(ถึงผู้บริหารทั้งสองท่าน)</span>`;
-        msgHtml += `<div class="bg-white p-3 border border-amber-200 rounded-xl"><span class="font-bold text-[11px] text-amber-800 block mb-1">${m.name} <span class="font-normal text-[9px] text-amber-600">(${m.email})</span>${toLabel}</span><div class="text-[11px] text-slate-700 my-2 bg-amber-50 p-2 rounded border border-amber-100">${wrapLongText(m.text, 'qtxt_'+m.id)}</div><input type="text" id="ans_${m.id}" placeholder="พิมพ์ข้อความตอบกลับ..." class="w-full p-2 text-[10px] border border-amber-300 rounded-lg mb-2 outline-none focus:border-amber-500"><div class="flex gap-2"><button onclick="replyMsg('${m.id}')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">ตอบกลับ</button><button onclick="bounceMsg('${m.id}')" title="กรณีถามผิดคน/ไม่ใช่เรื่องของเรา" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">🔄 ตีกลับ</button></div></div>`;
+        msgHtml += `<div class="bg-white p-3 border border-amber-200 rounded-xl"><span class="font-bold text-[11px] text-amber-800 block mb-1">${m.name} <span class="font-normal text-[9px] text-amber-600">(${m.email})</span>${toLabel}</span><div class="text-[11px] text-slate-700 my-2 bg-amber-50 p-2 rounded border border-amber-100">${wrapLongText(m.text, 'qtxt_'+m.id)}</div><input type="text" id="ans_${m.id}" placeholder="พิมพ์ข้อความตอบกลับ..." class="w-full p-2 text-[10px] border border-amber-300 rounded-lg mb-2 outline-none focus:border-amber-500"><div class="flex gap-2"><button onclick="replyMsg('${m.id}')" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">ตอบกลับ</button><button onclick="bounceMsg('${m.id}')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">🔄 ตีกลับ</button></div></div>`;
     });
     document.getElementById("bossQuestionBox").innerHTML = msgHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีคำถามจากทีม</div>`;
 
@@ -514,7 +487,7 @@ function renderBossBoxes() {
 
         reqHtml += `<div class="bg-white p-3 border border-indigo-200 rounded-xl"><span class="font-bold text-[11px] text-indigo-800 block mb-1">${r.topic}${toLabel}</span><div class="text-[10px] text-slate-500 font-bold mb-1">👤 ผู้นัด: ${r.name} <span class="font-normal text-slate-400">(${r.email})</span></div><div class="text-[10px] text-slate-600 my-2 bg-indigo-50 p-2 rounded border border-indigo-100"><b class="text-slate-800">เวลา:</b> ${new Date(r.date).toLocaleString('th-TH')}${durLabel}<br><b class="text-slate-800">สถานที่:</b> ${wrapLongText(r.loc, 'loc_'+r.id)}</div>${actionArea}</div>`;
     });
-    document.getElementById("bossMeetingsBox").innerHTML = reqHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีคำขอนัดหมาย${showArchiveMeet?'เก่า':''}</div>`;
+    document.getElementById("bossMeetingsBox").innerHTML = reqHtml || `<div class="text-center text-xs text-slate-400 py-6">ไม่มีคำขอนัดหมาย</div>`;
 }
 
 function renderMeetKpis() {
@@ -526,7 +499,6 @@ function renderMeetKpis() {
     let elS = document.getElementById('kpiMeetSoon'); if(elS) elS.innerText = soon;
 }
 
-// ข้อ 2+3 (รอบล่าสุด): กรอง dropdown เฉพาะโครงการของตนเอง + เพิ่มปุ่มแก้ไข/ลบโครงการ
 function renderProjectBars() {
     let pMap = {};
     (allProjects || []).forEach(p => {
@@ -592,7 +564,6 @@ function renderProjectBars() {
     }
 }
 
-// --- 4.1 TEAM DASHBOARD ---
 function openTeamDashboard() {
     document.getElementById('bossPanel').classList.add('hidden');
     document.getElementById('teamDashboardPage').classList.remove('hidden');
@@ -685,93 +656,89 @@ function renderTeamMemberGrid() {
     grid.innerHTML = html || `<div class="col-span-full text-center text-xs text-slate-400 py-10">ไม่มีคณะทำงานตรงตามตัวกรองนี้</div>`;
 }
 
-// --- 5. EVENT HANDLERS & ACTION LOGIC ---
-function doReview(id, stat) {
+// ==========================================
+// 6. FIRESTORE ACTIONS & EVENT HANDLERS
+// ==========================================
+async function doReview(id, stat) {
     let fb = document.getElementById('fb_'+id)?.value || '';
-    let task = allTasks.find(x => x.id === id);
-    if(task) {
-        task.status = stat;
-        task.feedback = fb;
-        if(stat === 'เสร็จสิ้น') notifyHeadOfApproval(task, fb);
+    await updateDoc(doc(db, "tasks", id), {
+        status: stat,
+        feedback: fb
+    });
+    if(stat === 'เสร็จสิ้น') {
+        let task = allTasks.find(x => x.id === id);
+        if(task) notifyHeadOfApproval(task, fb);
     }
-    renderData();
-    sendToSheets({action: "reviewTask", taskId: id, status: stat, feedback: fb}, false);
+    toast("บันทึกผลการตรวจเรียบร้อย ✅", "success");
 }
 
-// ข้อ 7 (FYI flow): ผู้บริหาร/หัวหน้ากด "รับทราบแล้ว" สำหรับงานที่ส่งมาแบบ FYI
-function ackTaskFyi(taskId) {
-    let task = allTasks.find(x => x.id === taskId);
-    if(task) task.status = 'รับทราบแล้ว';
-    renderData();
-    sendToSheets({action: "reviewTask", taskId: taskId, status: 'รับทราบแล้ว', feedback: ''}, false);
+async function ackTaskFyi(taskId) {
+    await updateDoc(doc(db, "tasks", taskId), { status: 'รับทราบแล้ว' });
     toast("รับทราบเรียบร้อยแล้ว ✅", "success");
 }
 
-function notifyHeadOfApproval(task, feedback) {
+async function notifyHeadOfApproval(task, feedback) {
     let head = dbUsers.find(u => u.role === 'HEAD' && u.dept === task.dept);
     if(!head) return;
     let newId = "M_" + Date.now();
     let noticeText = `✅ งาน "${task.name}" (โครงการ: ${task.project}) ผ่านการอนุมัติจากผู้บริหาร ${currentUser.name} แล้ว` + (feedback ? ` — ความเห็นเพิ่มเติม: ${feedback}` : '');
-    allMsgs.push({ id: newId, email: head.email, name: head.name, text: '[ระบบแจ้งเตือน] งานผ่านการอนุมัติแล้ว', file: '', reply: noticeText, to: currentUser.email });
-    sendToSheets({ action: "askQuestion", msgId: newId, email: head.email, name: head.name, text: '[ระบบแจ้งเตือน] งานผ่านการอนุมัติแล้ว', to: currentUser.email }, false);
-    sendToSheets({ action: "replyMsg", msgId: newId, reply: noticeText }, false);
+    
+    await setDoc(doc(db, "messages", newId), {
+        email: head.email,
+        name: head.name,
+        text: '[ระบบแจ้งเตือน] งานผ่านการอนุมัติแล้ว',
+        file: '',
+        reply: noticeText,
+        to: currentUser.email
+    });
 }
 
-function doHeadReview(id) {
+async function doHeadReview(id) {
     let select = document.getElementById('headActSelect_'+id);
     let action = select.value;
     let fb = document.getElementById('fb_'+id)?.value || '';
-    let task = allTasks.find(x => x.id === id);
+    let newStatus = 'เสร็จสิ้น';
 
-    if(!task) return;
+    if(action === 'ตีกลับ') newStatus = 'ส่งกลับแก้ไข';
+    else if(action === 'จัดเก็บ') newStatus = 'เสร็จสิ้น';
+    else if(action.startsWith('ส่งผู้บริหาร_')) newStatus = `ส่งถึง: ${action.split('_')[1]}`;
 
-    if(action === 'ตีกลับ') {
-        task.status = 'ส่งกลับแก้ไข';
-        task.feedback = fb;
-    } else if(action === 'จัดเก็บ') {
-        task.status = 'เสร็จสิ้น';
-        task.feedback = fb;
-    } else if(action.startsWith('ส่งผู้บริหาร_')) {
-        let bossEmail = action.split('_')[1];
-        task.status = `ส่งถึง: ${bossEmail}`;
-        task.feedback = fb;
-    }
-    renderData();
-    sendToSheets({action: "reviewTask", taskId: id, status: task.status, feedback: fb}, false);
+    await updateDoc(doc(db, "tasks", id), {
+        status: newStatus,
+        feedback: fb
+    });
+    toast("ส่งต่อ/บันทึกเรียบร้อย ✅", "success");
 }
 
-function ackNote(id) {
-    let note = allNotes.find(x => x.id === id);
-    if(note) note.status = "รับทราบแล้ว";
-    renderData();
-    sendToSheets({action: "ackNote", noteId: id}, false);
+async function ackNote(id) {
+    await updateDoc(doc(db, "notes", id), { status: "รับทราบแล้ว" });
+    toast("บันทึกรับทราบแล้ว ✅", "success");
 }
-function replyMsg(id) {
+
+async function replyMsg(id) {
     let ans = document.getElementById('ans_'+id).value;
     if(ans) {
-        let msg = allMsgs.find(x => x.id === id);
-        if(msg) msg.reply = ans;
-        renderData();
-        sendToSheets({action: "replyMsg", msgId: id, reply: ans}, false);
+        await updateDoc(doc(db, "messages", id), { reply: ans });
+        toast("ตอบกลับคำถามเรียบร้อย ✅", "success");
     }
 }
-function bounceMsg(id) {
+
+async function bounceMsg(id) {
     let extra = document.getElementById('ans_'+id).value;
-    let reason = prompt("เหตุผลที่ตีกลับ (เช่น ไม่ใช่เรื่องของแผนกเรา / กรุณาส่งให้คนอื่น):", extra || "");
+    let reason = prompt("เหตุผลที่ตีกลับ:", extra || "");
     if(reason === null) return;
-    let bounced = "🔄 [ตีกลับ - กรุณาตรวจสอบผู้รับ] " + (reason || "เรื่องนี้ไม่ใช่เรื่องของผม/ดิฉัน กรุณาส่งคำถามนี้ใหม่ให้ถูกคน");
-    let msg = allMsgs.find(x => x.id === id);
-    if(msg) msg.reply = bounced;
-    renderData();
-    sendToSheets({action: "replyMsg", msgId: id, reply: bounced}, false);
+    let bounced = "🔄 [ตีกลับ - กรุณาตรวจสอบผู้รับ] " + (reason || "ไม่ใช่เรื่องของฝ่ายนี้");
+    await updateDoc(doc(db, "messages", id), { reply: bounced });
+    toast("ตีกลับคำถามเรียบร้อย ✅", "info");
 }
-function replyMeet(id, stat) {
-    let rmk = document.getElementById('rmk_'+id)?.value || '';
-    if(stat === 'ปฏิเสธ' && !rmk) rmk = 'ขอนัดใหม่ในโอกาสถัดไป';
-    let req = allReqs.find(x => x.id === id);
-    if(req) { req.status = stat; req.remark = rmk; }
-    renderData();
-    sendToSheets({action: "replyMeet", reqId: id, status: stat, remark: rmk}, false);
+
+async function replyMeet(id, stat) {
+    let rmk = document.getElementById('rmk_'+id)?.value || (stat === 'ปฏิเสธ' ? 'ขอนัดใหม่ในโอกาสถัดไป' : '');
+    await updateDoc(doc(db, "meetings", id), {
+        status: stat,
+        remark: rmk
+    });
+    toast("ตอบรับการนัดหมายเรียบร้อย ✅", "success");
 }
 
 function openMeetingEditModal(reqId) {
@@ -784,7 +751,8 @@ function openMeetingEditModal(reqId) {
     document.getElementById('meEditReason').value = '';
     openModal('meetingEditModal');
 }
-function submitMeetingEditRequest() {
+
+async function submitMeetingEditRequest() {
     let reqId = document.getElementById('meEditRowId').value;
     let newTime = document.getElementById('meEditNewTime').value;
     let newLoc = document.getElementById('meEditNewLoc').value;
@@ -792,28 +760,31 @@ function submitMeetingEditRequest() {
     if(!newTime) return alert('กรุณาระบุเวลาที่ต้องการขอแก้ไข');
     let r = allReqs.find(x => x.id === reqId);
     if(!r) return;
-    r.status = 'ขอแก้ไขเวลา';
-    r._editNewDate = newTime;
-    r._editNewLoc = newLoc || r.loc;
+
     let remarkTxt = `ผู้บริหารขอเปลี่ยนเวลาเป็น ${new Date(newTime).toLocaleString('th-TH')}${newLoc ? (' @ ' + newLoc) : ''}${reason ? (' | เหตุผล: ' + reason) : ''}`;
-    r.remark = remarkTxt;
+    await updateDoc(doc(db, "meetings", reqId), {
+        status: 'ขอแก้ไขเวลา',
+        remark: remarkTxt,
+        _editNewDate: newTime,
+        _editNewLoc: newLoc || r.loc
+    });
     closeModal('meetingEditModal');
-    renderData();
-    sendToSheets({ action: 'replyMeet', reqId: reqId, status: 'ขอแก้ไขเวลา', remark: remarkTxt }, false);
+    toast("ส่งคำขอแก้ไขเวลานัดหมายแล้ว ✅", "success");
 }
-function confirmMeetingNewTime(reqId) {
+
+async function confirmMeetingNewTime(reqId) {
     let r = allReqs.find(x => x.id === reqId);
     if(!r) return;
-    r.status = 'รับนัด';
-    if(r._editNewDate) r.date = r._editNewDate;
-    if(r._editNewLoc) r.loc = r._editNewLoc;
-    r.remark = 'ผู้ขอนัดยืนยันเวลาใหม่แล้ว';
-    renderData();
-    sendToSheets({ action: 'replyMeet', reqId: reqId, status: 'รับนัด', remark: 'ผู้ขอนัดยืนยันเวลาใหม่แล้ว' }, false);
+    await updateDoc(doc(db, "meetings", reqId), {
+        status: 'รับนัด',
+        date: r._editNewDate || r.date,
+        loc: r._editNewLoc || r.loc,
+        remark: 'ผู้ขอนัดยืนยันเวลาใหม่แล้ว'
+    });
     toast('ยืนยันเวลานัดหมายใหม่เรียบร้อยแล้ว ✅', 'success');
 }
 
-function addTaskIntoList() {
+async function addTaskIntoList() {
     let t = document.getElementById("newTaskNameInput").value || document.getElementById("activeSubTaskSelect").value;
     let dl = document.getElementById("newTaskDeadlineInput").value;
     let p = document.getElementById("activeProjectSelect").value;
@@ -821,151 +792,137 @@ function addTaskIntoList() {
     if(!t) return alert("กรุณาระบุชื่องาน หรือเลือกงานจากเช็คลิสต์");
     let newTaskId = "T_" + Date.now();
 
-    allTasks.push({ id: newTaskId, project: p, name: t, email: currentUser.email, deadline: dl || "-", dept: currentUser.dept, file: "", cc: "", tag: "", status: "ยังไม่เริ่มทำ", feedback: "", timeSpent: 0, taskDesc: "", submittedAt: "", lateVerdict: "", editedAt: "" });
+    await setDoc(doc(db, "tasks", newTaskId), {
+        project: p,
+        name: t,
+        email: currentUser.email,
+        deadline: dl || "-",
+        dept: currentUser.dept,
+        file: "",
+        cc: "",
+        tag: "",
+        status: "ยังไม่เริ่มทำ",
+        feedback: "",
+        timeSpent: 0,
+        taskDesc: "",
+        submittedAt: "",
+        lateVerdict: "",
+        editedAt: ""
+    });
 
     document.getElementById("newTaskNameInput").value = "";
-    renderData();
-    sendToSheets({ action: "createTask", taskId: newTaskId, taskName: t, project: p, email: currentUser.email, deadline: dl || "-", dept: currentUser.dept, desc: "" }, false);
+    toast("เพิ่มงานเรียบร้อยแล้ว ✅", "success");
 }
 
-// ข้อ 3 (รอบล่าสุด): ใครแก้ไข/ลบงานย่อยได้บ้าง
 function canManageTask(t) {
     if(currentUser.role === 'BOSS' || currentUser.role === 'ADMIN') return true;
     if(currentUser.role === 'HEAD' && t.dept === currentUser.dept) return true;
     return t.email === currentUser.email && (t.status === 'ยังไม่เริ่มทำ' || t.status === 'กำลังทำ');
 }
 
-function editProject(projId) {
+async function editProject(projId) {
     let p = allProjects.find(x => x.projId === projId);
     if(!p) return;
     let newName = prompt("แก้ไขชื่อโครงการ:", p.projName);
     if(newName === null) return;
     let newDeadline = prompt("แก้ไขกำหนดส่ง (YYYY-MM-DD):", p.deadline !== '-' ? p.deadline : '');
     if(newDeadline === null) return;
-    p.projName = newName; p.deadline = newDeadline || '-';
-    renderData();
-    sendToSheets({ action: "editProject", projId: projId, projName: newName, deadline: p.deadline, projNameEn: p.projNameEn }, false);
+
+    await updateDoc(doc(db, "projects", projId), {
+        projName: newName,
+        deadline: newDeadline || '-'
+    });
     toast("แก้ไขโครงการเรียบร้อยแล้ว ✅", "success");
 }
-function deleteProject(projId) {
+
+async function deleteProject(projId) {
     let p = allProjects.find(x => x.projId === projId);
     if(!p) return;
-    if(!confirm(`ยืนยันลบโครงการ "${p.projName}"? (งานย่อยที่มีอยู่จะไม่ถูกลบ แต่จะไม่ผูกกับโครงการหลักอีกต่อไป)`)) return;
-    allProjects = allProjects.filter(x => x.projId !== projId);
-    renderData();
-    sendToSheets({ action: "deleteProject", projId: projId }, false);
+    if(!confirm(`ยืนยันลบโครงการ "${p.projName}"?`)) return;
+    await deleteDoc(doc(db, "projects", projId));
     toast("ลบโครงการเรียบร้อยแล้ว ✅", "success");
 }
-function editTask(taskId) {
+
+async function editTask(taskId) {
     let t = allTasks.find(x => x.id === taskId);
     if(!t || !canManageTask(t)) return alert("คุณไม่มีสิทธิ์แก้ไขงานนี้");
     let newName = prompt("แก้ไขชื่องาน:", t.name);
     if(newName === null) return;
     let newDeadline = prompt("แก้ไขกำหนดส่ง (YYYY-MM-DD):", t.deadline !== '-' ? t.deadline : '');
     if(newDeadline === null) return;
-    t.name = newName; t.deadline = newDeadline || '-';
-    renderData();
-    sendToSheets({ action: "editTask", taskId: taskId, taskName: newName, deadline: t.deadline }, false);
-    toast("แก้ไขงานเรียบร้อยแล้ว ✅ ระบบบันทึกเวลาที่แก้ไขไว้แล้ว", "success");
+
+    await updateDoc(doc(db, "tasks", taskId), {
+        name: newName,
+        deadline: newDeadline || '-',
+        editedAt: new Date().toISOString()
+    });
+    toast("แก้ไขงานเรียบร้อยแล้ว ✅", "success");
 }
-function deleteTaskConfirm(taskId) {
+
+async function deleteTaskConfirm(taskId) {
     let t = allTasks.find(x => x.id === taskId);
     if(!t || !canManageTask(t)) return alert("คุณไม่มีสิทธิ์ลบงานนี้");
-    if(!confirm(`ยืนยันลบงาน "${t.name}"? ลบแล้วกู้คืนไม่ได้`)) return;
-    allTasks = allTasks.filter(x => x.id !== taskId);
-    renderData();
-    sendToSheets({ action: "deleteTask", taskId: taskId }, false);
+    if(!confirm(`ยืนยันลบงาน "${t.name}"?`)) return;
+    await deleteDoc(doc(db, "tasks", taskId));
     toast("ลบงานเรียบร้อยแล้ว ✅", "success");
 }
 
-// ข้อ 7 (FYI flow): เช็ค checkbox แล้วแนบ prefix "แจ้งให้ทราบ:" ไว้ที่ roleToSubmit
 async function finalizeTaskSubmission() {
-    let files = Array.from(document.getElementById("taskFileInput").files);
     let linkVal = document.getElementById("taskLinkInput").value.trim();
     let tag = document.getElementById("taskTag").value;
     let dl = document.getElementById("modalTaskDeadline").value;
     if(isLate(dl)) { tag += " (LATE 🔴)"; }
 
     let roleToSubmit = document.getElementById("submitToRole").value;
-
     let bossPicker = document.getElementById("bossPickerSelect");
-    if(currentUser.role === 'HEAD' && bossPicker && bossPicker.value) {
-        roleToSubmit = bossPicker.value;
-    }
+    if(currentUser.role === 'HEAD' && bossPicker && bossPicker.value) roleToSubmit = bossPicker.value;
 
     let peerSelect = document.getElementById("peerReviewerSelect");
     let peerTarget = (peerSelect && peerSelect.value) ? peerSelect.value : '';
     let normalFlowIfDone = (currentUser.role === 'HEAD') ? 'รอผู้บริหารตรวจ' : 'รอหัวหน้าตรวจ';
-    if(peerTarget) {
-        roleToSubmit = `รอตรวจจาก: ${peerTarget} :: ถัดไป: ${normalFlowIfDone}`;
-    }
+    if(peerTarget) roleToSubmit = `รอตรวจจาก: ${peerTarget} :: ถัดไป: ${normalFlowIfDone}`;
 
     let isFyiOnly = document.getElementById("fyiOnlyCheckbox")?.checked || false;
-    if(isFyiOnly) {
-        roleToSubmit = 'แจ้งให้ทราบ: ' + roleToSubmit;
-    }
+    if(isFyiOnly) roleToSubmit = 'แจ้งให้ทราบ: ' + roleToSubmit;
 
     let spentSec = taskSeconds[curSubmitId] || 0;
-
     let ccSelect = document.getElementById("ccToSelect");
     let selectedCCs = Array.from(ccSelect.selectedOptions).map(opt => opt.value).filter(val => val !== "");
     let ccString = selectedCCs.join(",");
 
-    if(files.length === 0 && !linkVal) {
-        if(!confirm("ยังไม่ได้แนบไฟล์หรือลิงก์ผลงาน ต้องการส่งเลยหรือไม่?")) return;
-    }
+    let submitDesc = document.getElementById("taskSubmitDesc")?.value || "";
 
-    document.getElementById('loadingOverlay').classList.remove('hidden');
-    document.querySelector('#loadingOverlay h2').innerText = "กำลังอัปโหลดไฟล์...";
-
-    let filesPayload = [];
-for (let f of files) {
-    let base64 = await new Promise((res, rej) => {
-        let reader = new FileReader();
-        reader.onload = () => res(reader.result);
-        reader.onerror = rej;
-        reader.readAsDataURL(f);
+    await updateDoc(doc(db, "tasks", curSubmitId), {
+        status: roleToSubmit,
+        tag: tag,
+        timeSpent: spentSec,
+        cc: ccString,
+        submittedAt: new Date().toISOString(),
+        file: linkVal || "ไม่มีไฟล์",
+        taskDesc: submitDesc
     });
-    
-    // แปลงชื่อไฟล์ภาษาไทยจาก Mac (NFD) ให้เป็นมาตรฐาน (NFC)
-    let safeFileName = f.name.normalize('NFC'); 
-    
-    filesPayload.push({ name: safeFileName, mimeType: f.type || 'application/octet-stream', base64: base64 });
-}
-
-    let task = allTasks.find(x => x.id === curSubmitId);
-    let submittedAtNow = new Date().toISOString();
-    if(task) { task.status = roleToSubmit; task.tag = tag; task.timeSpent = spentSec; task.cc = ccString; task.submittedAt = submittedAtNow; }
 
     closeModal('submitTaskModal');
-    renderData();
-
-    let submitDesc = document.getElementById("taskSubmitDesc")?.value || "";
-    await sendToSheets({
-        action: "submitTaskFile",
-        taskId: curSubmitId,
-        files: filesPayload,
-        link: linkVal,
-        desc: submitDesc,
-        cc: ccString, tag: tag, roleToSubmit: roleToSubmit, timeSpent: spentSec,
-        name: currentUser.name, email: currentUser.email, dept: currentUser.dept
-    }, false);
-
-    document.getElementById('loadingOverlay').classList.add('hidden');
     toast(isFyiOnly ? "ส่งแจ้งให้ทราบเรียบร้อยแล้ว 📢" : "ส่งงานเรียบร้อยแล้ว ✅", "success");
 }
 
-// ข้อ 7 (FYI flow): เพิ่ม link ไปกับบันทึกข้อความ
-function submitStaffAction(act) {
+async function submitStaffAction(act) {
     if(act === 'askQuestion') {
         let txt = document.getElementById("popQuestionText").value;
         if(!txt) return alert("กรุณาพิมพ์คำถาม");
         let toBoss = document.getElementById("popQuestionToBoss").value;
-        let newId = "M_"+Date.now();
-        allMsgs.push({id: newId, email: currentUser.email, name: currentUser.name, text: txt, file: "", reply: "", to: toBoss});
+        let newId = "M_" + Date.now();
+
+        await setDoc(doc(db, "messages", newId), {
+            email: currentUser.email,
+            name: currentUser.name,
+            text: txt,
+            file: "",
+            reply: "",
+            to: toBoss
+        });
         closeModal('staffQuestionModal');
         document.getElementById("popQuestionText").value = "";
-        sendToSheets({action: "askQuestion", msgId: newId, email: currentUser.email, name: currentUser.name, text: txt, to: toBoss}, false);
         toast("ส่งคำถามเรียบร้อยแล้ว ✅", "success");
     } else if (act === 'reqMeeting') {
         let topic = document.getElementById("reqMeetTopic").value;
@@ -973,46 +930,115 @@ function submitStaffAction(act) {
         let duration = document.getElementById("reqMeetDuration").value;
         let toBoss = document.getElementById("reqMeetToBoss").value;
         if(!topic || !date) return alert("ระบุหัวข้อและเวลาให้ครบถ้วน");
-        let newId = "R_"+Date.now();
-        allReqs.push({id: newId, email: currentUser.email, name: currentUser.name, topic: topic, date: date, loc: document.getElementById("reqMeetLoc").value, status: "รอตอบ", remark: "", duration: duration, to: toBoss});
+        let newId = "R_" + Date.now();
+
+        await setDoc(doc(db, "meetings", newId), {
+            email: currentUser.email,
+            name: currentUser.name,
+            topic: topic,
+            date: date,
+            loc: document.getElementById("reqMeetLoc").value,
+            status: "รอตอบ",
+            remark: "",
+            duration: duration,
+            to: toBoss
+        });
         closeModal('meetingRequestModal');
-        sendToSheets({action: "reqMeeting", reqId: newId, email: currentUser.email, name: currentUser.name, topic: topic, date: date, loc: document.getElementById("reqMeetLoc").value, duration: duration, to: toBoss}, false);
         toast("ส่งคำขอนัดหมายเรียบร้อยแล้ว ✅", "success");
     } else if (act === 'sendNote') {
         let topic = document.getElementById("noteTopic").value;
         let desc = document.getElementById("noteDesc").value;
         let link = document.getElementById("noteLink")?.value || '';
         if(!topic) return alert("ระบุหัวข้อบันทึก");
-        let newId = "N_"+Date.now();
-        let sentAt = new Date().toISOString();
-        allNotes.push({id: newId, email: currentUser.email, name: currentUser.name, topic: topic, dept: currentUser.dept, status: "ยังไม่รับทราบ", sentAt: sentAt, desc: desc, link: link});
+        let newId = "N_" + Date.now();
+
+        await setDoc(doc(db, "notes", newId), {
+            email: currentUser.email,
+            name: currentUser.name,
+            topic: topic,
+            dept: currentUser.dept,
+            status: "ยังไม่รับทราบ",
+            sentAt: new Date().toISOString(),
+            desc: desc,
+            link: link
+        });
         closeModal('sendNoteModal');
-        sendToSheets({action: "sendNote", noteId: newId, email: currentUser.email, name: currentUser.name, topic: topic, dept: document.getElementById("noteDept").value, sentAt: sentAt, desc: desc, link: link}, false);
         toast("ส่งบันทึกข้อความเรียบร้อยแล้ว ✅", "success");
     }
 }
 
-function toggleCustomMeet() {
-    let val = document.getElementById("meetNameSelect").value;
-    let customInput = document.getElementById("meetCustomName");
-    if(val === "อื่นๆ") customInput.classList.remove("hidden");
-    else customInput.classList.add("hidden");
-}
+async function submitNewProject() {
+    let existingProj = document.getElementById("cpExistingProject").value;
+    if(!mockNewProjTasks.length) return alert("โปรดเพิ่มงานย่อยอย่างน้อย 1 งาน");
+    let isBoss = (currentUser.role === 'BOSS' || currentUser.role === 'ADMIN');
 
-function calculateEndTime() {
-    let start = document.getElementById("reqMeetDate").value;
-    let dur = parseInt(document.getElementById("reqMeetDuration").value) || 0;
-    let display = document.getElementById("reqMeetEndDisplay");
-    if(start && dur > 0) {
-        let d = new Date(start);
-        d.setMinutes(d.getMinutes() + dur);
-        display.innerText = "เวลาสิ้นสุดโดยประมาณ: " + d.toLocaleString('th-TH', {dateStyle: 'medium', timeStyle: 'short'});
+    if(existingProj) {
+        let proj = allProjects.find(x => x.projName === existingProj);
+        let masterDl = proj ? proj.deadline : "-";
+        for (let st of mockNewProjTasks) {
+            let newTid = "T_" + Date.now() + Math.random().toString(36).substring(2, 5);
+            await setDoc(doc(db, "tasks", newTid), {
+                project: existingProj,
+                name: st.t,
+                email: st.a,
+                deadline: st.dl !== '-' ? st.dl : masterDl,
+                dept: st.aDept || currentUser.dept,
+                file: "",
+                cc: "",
+                tag: "โครงการหลัก",
+                status: "ยังไม่เริ่มทำ",
+                feedback: "",
+                timeSpent: 0,
+                taskDesc: st.desc || "",
+                submittedAt: "",
+                lateVerdict: "",
+                editedAt: ""
+            });
+        }
     } else {
-        display.innerText = "เวลาสิ้นสุดโดยประมาณ: -";
+        let p = document.getElementById("cpName").value;
+        let pEn = document.getElementById("cpNameEn").value;
+        let dl = document.getElementById("cpDeadline").value;
+        if(!p) return alert("โปรดระบุชื่อโครงการ");
+        let projId = "P_" + Date.now();
+        let projDept = isBoss ? 'มอบหมายโดยผู้บริหาร' : currentUser.dept;
+
+        await setDoc(doc(db, "projects", projId), {
+            projName: p,
+            projNameEn: pEn,
+            deadline: dl || "-",
+            dept: projDept,
+            ownerEmail: currentUser.email,
+            ownerName: currentUser.name,
+            createdAt: new Date().toISOString()
+        });
+
+        for (let st of mockNewProjTasks) {
+            let newTid = "T_" + Date.now() + Math.random().toString(36).substring(2, 5);
+            await setDoc(doc(db, "tasks", newTid), {
+                project: p,
+                name: st.t,
+                email: st.a,
+                deadline: st.dl !== '-' ? st.dl : (dl || "-"),
+                dept: st.aDept || currentUser.dept,
+                file: "",
+                cc: "",
+                tag: "โครงการหลัก",
+                status: "ยังไม่เริ่มทำ",
+                feedback: "",
+                timeSpent: 0,
+                taskDesc: st.desc || "",
+                submittedAt: "",
+                lateVerdict: "",
+                editedAt: ""
+            });
+        }
     }
+    closeModal('createProjectModal');
+    toast("บันทึกโครงการเรียบร้อยแล้ว ✅", "success");
 }
 
-function submitMeetingLessonForm() {
+async function submitMeetingLessonForm() {
     let note = document.getElementById("meetNote").value;
     let type = document.getElementById("meetNameSelect").value;
     if(type === "อื่นๆ") type = document.getElementById("meetCustomName").value || "ไม่มีชื่อการประชุม";
@@ -1021,44 +1047,39 @@ function submitMeetingLessonForm() {
     if(!note) return alert("กรุณาพิมพ์เนื้อหาถอดบทเรียน");
     if(!dateVal) return alert("กรุณาระบุวันที่ประชุม");
 
-    allMeets.push({date: dateVal, email: currentUser.email, type: type, name: currentUser.name, note: note});
-    sendToSheets({ action: "submitLesson", email: currentUser.email, name: currentUser.name, type: type, date: dateVal, note: note }, false);
+    let lId = "L_" + Date.now();
+    await setDoc(doc(db, "lessons", lId), {
+        date: dateVal,
+        email: currentUser.email,
+        type: type,
+        name: currentUser.name,
+        note: note
+    });
+
     document.getElementById("meetNote").value = "";
     toast("ส่งถอดบทเรียนเรียบร้อยแล้ว ✅", "success");
 }
 
-function submitNewProject() {
-    let existingProj = document.getElementById("cpExistingProject").value;
-    if(!mockNewProjTasks.length) return alert("โปรดเพิ่มงานย่อยอย่างน้อย 1 งาน");
-    let isBoss = (currentUser.role === 'BOSS' || currentUser.role === 'ADMIN');
-
-    if(existingProj) {
-        let proj = allProjects.find(x => x.projName === existingProj);
-        let masterDl = proj ? proj.deadline : "-";
-        mockNewProjTasks.forEach(st => {
-            allTasks.push({id: "T_" + Date.now() + Math.random(), project: existingProj, name: st.t, email: st.a, deadline: st.dl !== '-' ? st.dl : masterDl, dept: st.aDept || currentUser.dept, file: "", cc: "", tag: "โครงการหลัก", status: "ยังไม่เริ่มทำ", feedback: "", timeSpent: 0, taskDesc: st.desc || "", submittedAt: "", lateVerdict: "", editedAt: ""});
-        });
-        renderData();
-        sendToSheets({ action: "addSubTasksToProject", projName: existingProj, dept: currentUser.dept, subTasks: mockNewProjTasks }, false);
-    } else {
-        let p = document.getElementById("cpName").value;
-        let pEn = document.getElementById("cpNameEn").value;
-        let dl = document.getElementById("cpDeadline").value;
-        if(!p) return alert("โปรดระบุชื่อโครงการ");
-        let projId = "P_" + Date.now();
-        let projDept = isBoss ? 'มอบหมายโดยผู้บริหาร' : currentUser.dept;
-        allProjects.push({ projId: projId, projName: p, projNameEn: pEn, deadline: dl || "-", dept: projDept, ownerEmail: currentUser.email, ownerName: currentUser.name, createdAt: new Date().toISOString() });
-        mockNewProjTasks.forEach(st => {
-            allTasks.push({id: "T_" + Date.now() + Math.random(), project: p, name: st.t, email: st.a, deadline: st.dl !== '-' ? st.dl : (dl || "-"), dept: st.aDept || currentUser.dept, file: "", cc: "", tag: "โครงการหลัก", status: "ยังไม่เริ่มทำ", feedback: "", timeSpent: 0, taskDesc: st.desc || "", submittedAt: "", lateVerdict: "", editedAt: ""});
-        });
-        renderData();
-        sendToSheets({ action: "createMasterProject", projId: projId, projName: p, projNameEn: pEn, deadline: dl || "-", dept: projDept, ownerEmail: currentUser.email, ownerName: currentUser.name, subTasks: mockNewProjTasks }, false);
+async function markTaskWorking(id) {
+    let t = allTasks.find(x => x.id === id);
+    if(t && t.status === 'ยังไม่เริ่มทำ') {
+        await updateDoc(doc(db, "tasks", id), { status: 'กำลังทำ' });
     }
-    closeModal('createProjectModal');
-    toast("บันทึกโครงการเรียบร้อยแล้ว ✅", "success");
 }
 
-// ข้อ 6+7 (รอบล่าสุด): renderHeadTasks รองรับงาน FYI ด้วย
+async function doPeerReview(taskId, newStatus) {
+    let fb = document.getElementById('pfb_'+taskId)?.value || '';
+    let task = allTasks.find(x => x.id === taskId);
+    let finalFb = task ? task.feedback : '';
+    if(fb) finalFb = (finalFb ? finalFb + ' | ' : '') + `[${currentUser.name} ช่วยตรวจ]: ${fb}`;
+
+    await updateDoc(doc(db, "tasks", taskId), {
+        status: newStatus,
+        feedback: finalFb
+    });
+    toast("ส่งต่อการตรวจเรียบร้อย ✅", "success");
+}
+
 function renderHeadTasks() {
     let tb = document.getElementById("headTasksTableBody");
     let tasks = allTasks.filter(t => t.dept === currentUser.dept && t.email !== currentUser.email &&
@@ -1136,15 +1157,6 @@ function renderPeerReviewSection() {
     tb.innerHTML = html;
 }
 
-function doPeerReview(taskId, newStatus) {
-    let fb = document.getElementById('pfb_'+taskId)?.value || '';
-    let task = allTasks.find(x => x.id === taskId);
-    if(task) { task.status = newStatus; if(fb) task.feedback = (task.feedback ? task.feedback + ' | ' : '') + `[${currentUser.name} ช่วยตรวจ]: ${fb}`; }
-    renderData();
-    sendToSheets({action: "reviewTask", taskId: taskId, status: newStatus, feedback: task ? task.feedback : fb}, false);
-}
-
-// ข้อ 3 (รอบล่าสุด): เพิ่มปุ่มแก้ไข/ลบ งานย่อยของตัวเองในตารางภารกิจวันนี้
 function renderStaffTasks() {
     let tb = document.getElementById("myTaskTableBody");
     let tasks = allTasks.filter(t => t.email === currentUser.email && (t.status === 'กำลังทำ' || t.status === 'ยังไม่เริ่มทำ'));
@@ -1168,7 +1180,6 @@ function renderStaffTasks() {
     }
 }
 
-// ข้อ 5 (รอบล่าสุด): กดดูรายละเอียดไฟล์/ลิงก์ของงานที่ส่งไปแล้ว
 function renderMySubmittedTasks() {
     let tb = document.getElementById("mySubmittedTableBody");
     if(!tb || !currentUser) return;
@@ -1206,15 +1217,6 @@ function renderMySubmittedTasks() {
     tb.innerHTML = html;
 }
 
-function markTaskWorking(id) {
-    let t = allTasks.find(x => x.id === id);
-    if(t && t.status === 'ยังไม่เริ่มทำ') {
-        t.status = 'กำลังทำ';
-        sendToSheets({action: "reviewTask", taskId: id, status: 'กำลังทำ', feedback: t.feedback || ''}, false);
-        renderData();
-    }
-}
-
 function showProjDetails(pName) {
     if(currentUser.role !== "BOSS" && currentUser.role !== "ADMIN") {
         let projMeta = allProjects.find(p => p.projName === pName);
@@ -1239,7 +1241,6 @@ function showProjDetails(pName) {
 function updateSubTaskDropdown() {
     let p = document.getElementById("activeProjectSelect").value;
     let sub = document.getElementById("activeSubTaskSelect");
-
     sub.innerHTML = '<option value="">-- ระบุชื่องานเองด้านล่าง --</option>';
 
     if(p !== "งานทั่วไป") {
@@ -1251,7 +1252,6 @@ function updateSubTaskDropdown() {
     }
 }
 
-// ข้อ 5+6 (รอบล่าสุด): ประวัติงานของผู้ใช้ เพิ่มปุ่มดูรายละเอียดไฟล์/ลิงก์ในทุกแถว
 function openUserTaskModal(email) {
     focusUserEmail = email;
     let u = dbUsers.find(x => x.email === email) || (currentUser && email === currentUser.email ? currentUser : null);
@@ -1268,25 +1268,6 @@ function openUserTaskModal(email) {
         </td></tr>`;
     });
     tb.innerHTML = html || `<tr><td colspan="6" class="text-center p-4 text-slate-400">ไม่มีประวัติภารกิจ</td></tr>`;
-
-    let extraBox = document.getElementById("userExtraHistoryBox");
-    if(extraBox) {
-        let lessons = allMeets.filter(m => m.email === email);
-        let questions = allMsgs.filter(m => m.email === email);
-        let notes = allNotes.filter(n => n.email === email);
-        let sec = '';
-        sec += `<div><h4 class="font-bold text-xs text-slate-700 border-b border-slate-200 pb-2 mb-2 mt-3"><i class="fas fa-book-reader text-emerald-500 mr-1"></i> ถอดบทเรียน (${lessons.length})</h4>`;
-        sec += lessons.length ? lessons.map(l => `<div class="bg-emerald-50 border border-emerald-100 rounded-lg p-2.5 mb-1.5 text-[11px]"><b>${l.type}</b> <span class="text-slate-400">(${fmtDate(l.date)})</span><div class="text-slate-600 mt-1">${escapeHtml(l.note)}</div></div>`).join('') : `<div class="text-[11px] text-slate-400">ไม่มีข้อมูล</div>`;
-        sec += `</div>`;
-        sec += `<div><h4 class="font-bold text-xs text-slate-700 border-b border-slate-200 pb-2 mb-2 mt-3"><i class="far fa-comments text-amber-500 mr-1"></i> คำถามที่เคยส่ง (${questions.length})</h4>`;
-        sec += questions.length ? questions.map(q => `<div class="bg-amber-50 border border-amber-100 rounded-lg p-2.5 mb-1.5 text-[11px]"><div class="text-slate-700">${escapeHtml(q.text)}</div>${q.reply ? `<div class="mt-1 text-emerald-700">↳ ${escapeHtml(q.reply)}</div>` : `<div class="mt-1 text-slate-400 italic">รอการตอบกลับ...</div>`}</div>`).join('') : `<div class="text-[11px] text-slate-400">ไม่มีข้อมูล</div>`;
-        sec += `</div>`;
-        sec += `<div><h4 class="font-bold text-xs text-slate-700 border-b border-slate-200 pb-2 mb-2 mt-3"><i class="fas fa-file-signature text-purple-500 mr-1"></i> บันทึกข้อความที่เคยส่ง (${notes.length})</h4>`;
-        sec += notes.length ? notes.map(n => `<div class="bg-purple-50 border border-purple-100 rounded-lg p-2.5 mb-1.5 text-[11px]"><b>${escapeHtml(n.topic)}</b> <span class="text-slate-400">(${n.status})</span>${n.link ? ` <a href="${n.link}" target="_blank" class="text-purple-600 hover:underline">🔗 ลิงก์</a>` : ''}</div>`).join('') : `<div class="text-[11px] text-slate-400">ไม่มีข้อมูล</div>`;
-        sec += `</div>`;
-        extraBox.innerHTML = sec;
-    }
-
     renderUserDailySummary(email, 'today');
     openModal("userTaskModal");
 }
@@ -1324,8 +1305,7 @@ function updateNotiBadges() {
     let unseenCount = allItems.filter(id => !seen.has(id)).length;
     let badge = document.getElementById("inboxNotiBadge");
     if(badge) {
-        if(unseenCount > 0) { badge.innerText = unseenCount;
-                      badge.classList.remove("hidden"); }
+        if(unseenCount > 0) { badge.innerText = unseenCount; badge.classList.remove("hidden"); }
         else { badge.classList.add("hidden"); }
     }
 }
@@ -1372,19 +1352,13 @@ function renderStaffInboxContent() {
     list.innerHTML = html || `<div class="text-center text-slate-400 text-xs py-8">คุณยังไม่มีประวัติการส่งคำถาม หรือขอนัดหมายผู้บริหาร</div>`;
 }
 
-async function openStaffInbox() {
+function openStaffInbox() {
     renderStaffInboxContent();
     openModal('staffInboxModal');
-
     let seenIds = allMsgs.filter(m => m.email === currentUser.email && m.reply).map(m => 'msg_'+m.id)
         .concat(allReqs.filter(r => r.email === currentUser.email && r.status !== "รอตอบ").map(r => 'req_'+r.id));
     markInboxSeen(seenIds);
     updateNotiBadges();
-
-    await silentRefresh();
-    if(!document.getElementById('staffInboxModal').classList.contains('hidden')) {
-        renderStaffInboxContent();
-    }
 }
 
 function checkLessonPerm() {
@@ -1458,7 +1432,9 @@ function addMockSubTask() {
     document.getElementById("cpSubTaskList").innerHTML = html;
 }
 
-// --- 5.5 CLOCK IN/OUT ---
+// ==========================================
+// 7. CLOCK IN / CLOCK OUT & TIMERS
+// ==========================================
 function computeAttendanceSecondsForDate(email, dateStr) {
     let dayAtt = allAtt.filter(a => a.email === email && new Date(a.time).toLocaleDateString('en-CA') === dateStr);
     dayAtt.sort((a,b) => new Date(a.time) - new Date(b.time));
@@ -1508,7 +1484,7 @@ function resumeAttendanceState() {
     updateDailySessionNote();
 }
 
-function masterClockIn() {
+async function masterClockIn() {
     isClockedIn = true;
     masterSessionStart = Date.now();
     document.getElementById("clockStatus").innerText = "🟢 ClockIn (Working)";
@@ -1519,16 +1495,22 @@ function masterClockIn() {
     btnOut.innerText = "🔴 ClockOut (Break/ClockOut)";
     btnOut.className = "w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 rounded-xl text-sm shadow-md transition";
     document.getElementById("timeLogged").innerText = "ClockIn ล่าสุด: " + new Date().toLocaleTimeString('th-TH');
-    sendToSheets({action: "ClockIn", email: currentUser.email, name: currentUser.name, time: new Date().toISOString()}, false);
-    updateDailySessionNote();
-    if(currentUser.role !== 'BOSS' && currentUser.role !== 'ADMIN') silentRefresh();
 
+    let attId = "ATT_" + Date.now();
+    await setDoc(doc(db, "attendance", attId), {
+        email: currentUser.email,
+        name: currentUser.name,
+        action: "ClockIn",
+        time: new Date().toISOString()
+    });
+
+    updateDailySessionNote();
     if(masterTimerInterval) clearInterval(masterTimerInterval);
     masterTimerInterval = setInterval(refreshMasterDisplay, 1000);
     refreshMasterDisplay();
 }
 
-function masterClockOut() {
+async function masterClockOut() {
     if(masterTimerInterval) clearInterval(masterTimerInterval);
     masterTimerInterval = null;
     if(isClockedIn && masterSessionStart) {
@@ -1543,9 +1525,16 @@ function masterClockOut() {
     btnOut.disabled = false;
     btnOut.innerText = "🟢 ClockIn (Working)";
     btnOut.className = "w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm shadow-md transition";
-    sendToSheets({action: "ClockOut", email: currentUser.email, name: currentUser.name, time: new Date().toISOString()}, false);
+
+    let attId = "ATT_" + Date.now();
+    await setDoc(doc(db, "attendance", attId), {
+        email: currentUser.email,
+        name: currentUser.name,
+        action: "ClockOut",
+        time: new Date().toISOString()
+    });
+
     updateDailySessionNote();
-    if(currentUser.role !== 'BOSS' && currentUser.role !== 'ADMIN') silentRefresh();
 }
 
 function toggleMasterClock() {
@@ -1579,7 +1568,8 @@ function startTimer(id) {
     document.getElementById('btnS_'+id).classList.add("hidden");
     document.getElementById('btnP_'+id).classList.remove("hidden");
 }
-function pauseTimer(id) {
+
+async function pauseTimer(id) {
     if(timers[id]) clearInterval(timers[id]);
     document.getElementById('btnP_'+id).classList.add("hidden");
     document.getElementById('btnS_'+id).classList.remove("hidden");
@@ -1587,7 +1577,16 @@ function pauseTimer(id) {
         let deltaSec = Math.round((Date.now() - taskStartedAt[id]) / 1000);
         if(deltaSec > 0 && currentUser) {
             let t = allTasks.find(x => x.id === id);
-            sendToSheets({ action: "logTime", email: currentUser.email, name: currentUser.name, taskId: id, taskName: t ? t.name : id, project: t ? t.project : '', date: todayStr(), seconds: deltaSec }, false);
+            let tlId = "TL_" + Date.now();
+            await setDoc(doc(db, "timelogs", tlId), {
+                email: currentUser.email,
+                name: currentUser.name,
+                taskId: id,
+                taskName: t ? t.name : id,
+                project: t ? t.project : '',
+                date: todayStr(),
+                seconds: deltaSec
+            });
         }
         delete taskStartedAt[id];
     }
@@ -1606,7 +1605,6 @@ function openSubmitModal(id) {
     document.getElementById("modalTaskName").innerHTML = t.name + feedbackAlert;
     document.getElementById("modalTaskDeadline").value = t.deadline;
     document.getElementById("modalTaskProj").value = t.project;
-    document.getElementById("taskFileInput").value = "";
     document.getElementById("taskLinkInput").value = "";
     document.getElementById("taskSubmitDesc").value = "";
     document.getElementById("taskTag").value = "ทั่วไป";
@@ -1629,13 +1627,13 @@ function openSubmitModal(id) {
 
     if(currentUser.role === 'HEAD') {
         roleSel.value = 'รอผู้บริหารตรวจ';
-        roleInfo.innerText = '👑 ค่าเริ่มต้น: ส่งถึงผู้บริหาร (เลือกท่านใดท่านหนึ่งด้านล่าง หรือระบุคนอื่นให้ช่วยตรวจก่อนก็ได้)';
+        roleInfo.innerText = '👑 ค่าเริ่มต้น: ส่งถึงผู้บริหาร';
         bossWrap.classList.remove('hidden');
         let bosses = dbUsers.filter(u => u.role === 'BOSS' || u.role === 'ADMIN');
         bossSelect.innerHTML = '<option value="">-- ใช้ค่าเริ่มต้นด้านบน --</option>' + bosses.map(b => `<option value="ส่งถึง: ${b.email}">👑 ${b.name}</option>`).join('');
     } else {
         roleSel.value = 'รอหัวหน้าตรวจ';
-        roleInfo.innerText = '👉 ค่าเริ่มต้น: ส่งให้หัวหน้าฝ่ายของคุณตรวจ (หรือระบุคนอื่นให้ช่วยตรวจก่อนก็ได้ ด้านล่าง)';
+        roleInfo.innerText = '👉 ค่าเริ่มต้น: ส่งให้หัวหน้าฝ่ายของคุณตรวจ';
         bossWrap.classList.add('hidden');
     }
 
@@ -1647,5 +1645,47 @@ function openSubmitModal(id) {
 function openModal(id) { document.getElementById(id).classList.remove("hidden"); }
 function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
 
-// --- 6. BOOTSTRAP ---
+// ==========================================
+// 8. GLOBAL EXPORTS & BOOTSTRAP
+// ==========================================
+window.handleSecureLogin = handleSecureLogin;
+window.handleLogout = handleLogout;
+window.manualRefresh = manualRefresh;
+window.toggleView = toggleView;
+window.toggleMasterClock = toggleMasterClock;
+window.startTimer = startTimer;
+window.pauseTimer = pauseTimer;
+window.openSubmitModal = openSubmitModal;
+window.finalizeTaskSubmission = finalizeTaskSubmission;
+window.addTaskIntoList = addTaskIntoList;
+window.editTask = editTask;
+window.deleteTaskConfirm = deleteTaskConfirm;
+window.showProjDetails = showProjDetails;
+window.updateSubTaskDropdown = updateSubTaskDropdown;
+window.openCreateProjectModal = openCreateProjectModal;
+window.addMockSubTask = addMockSubTask;
+window.submitNewProject = submitNewProject;
+window.onCpProjectChange = onCpProjectChange;
+window.openUserTaskModal = openUserTaskModal;
+window.renderUserDailySummary = renderUserDailySummary;
+window.openStaffInbox = openStaffInbox;
+window.submitStaffAction = submitStaffAction;
+window.submitMeetingLessonForm = submitMeetingLessonForm;
+window.doReview = doReview;
+window.ackTaskFyi = ackTaskFyi;
+window.doHeadReview = doHeadReview;
+window.doPeerReview = doPeerReview;
+window.ackNote = ackNote;
+window.replyMsg = replyMsg;
+window.bounceMsg = bounceMsg;
+window.replyMeet = replyMeet;
+window.openMeetingEditModal = openMeetingEditModal;
+window.submitMeetingEditRequest = submitMeetingEditRequest;
+window.confirmMeetingNewTime = confirmMeetingNewTime;
+window.openTeamDashboard = openTeamDashboard;
+window.closeTeamDashboard = closeTeamDashboard;
+window.filterTeamDash = filterTeamDash;
+window.openModal = openModal;
+window.closeModal = closeModal;
+
 window.addEventListener('DOMContentLoaded', initApp);
