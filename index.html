@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WorkBoard ERP (Live Connected)</title>
+    <title>WorkBoard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -32,17 +32,19 @@
         <p class="text-sm text-slate-400 mt-2">รอสักครู่ ระบบกำลังประมวลผล</p>
     </div>
 
-    <div id="loginScreen" class="fixed inset-0 bg-slate-900 z-50 hidden flex flex-col items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-2xl w-full max-w-sm space-y-6 shadow-2xl">
+<div id="loginScreen" class="fixed inset-0 bg-gradient-to-br from-[#fcfbf9] via-[#f5efe6] to-[#e6dac8] z-50 flex flex-col items-center justify-center p-4">
+        <div class="bg-white/90 backdrop-blur-md p-8 rounded-3xl w-full max-w-sm space-y-6 shadow-2xl border border-white/60">
             <div class="text-center">
-                <div class="inline-flex p-4 bg-indigo-600 text-white rounded-2xl text-3xl mb-4 shadow-lg"><i class="fas fa-layer-group"></i></div>
-                <h2 class="text-2xl font-bold text-slate-800">WorkBoard ERP</h2>
-                <p class="text-sm text-slate-500 mt-1">ระบบจัดการงาน</p>
+                <div class="inline-flex p-4 bg-gradient-to-br from-[#cbb294] to-[#8c7355] text-white rounded-2xl text-3xl mb-4 shadow-lg shadow-amber-900/10">
+                    <i class="fas fa-layer-group"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-[#3d332a]">WorkBoard ERP</h2>
+                <p class="text-sm text-[#8c7e72] mt-1">ระบบจัดการงาน</p>
             </div>
             <div class="space-y-4">
-                <input type="email" id="loginEmail" placeholder="อีเมลผู้ใช้งาน" class="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 focus:outline-none focus:border-indigo-500 transition">
-                <input type="password" id="loginPassword" placeholder="รหัสผ่าน" class="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 focus:outline-none focus:border-indigo-500 transition">
-                <button onclick="handleSecureLogin()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-md transition duration-200">เข้าสู่ระบบ</button>
+                <input type="email" id="loginEmail" placeholder="อีเมลผู้ใช้งาน" class="w-full p-3 border border-[#e8dfd3] rounded-xl bg-[#faf7f2] text-[#3d332a] focus:outline-none focus:border-[#8c7355] focus:bg-white transition shadow-sm">
+                <input type="password" id="loginPassword" placeholder="รหัสผ่าน" class="w-full p-3 border border-[#e8dfd3] rounded-xl bg-[#faf7f2] text-[#3d332a] focus:outline-none focus:border-[#8c7355] focus:bg-white transition shadow-sm">
+                <button onclick="handleSecureLogin()" class="w-full bg-gradient-to-r from-[#9c8263] to-[#806749] hover:from-[#8c7355] hover:to-[#70583b] text-white font-bold py-3.5 rounded-xl shadow-lg shadow-amber-900/15 transition duration-200">เข้าสู่ระบบ</button>
             </div>
         </div>
     </div>
