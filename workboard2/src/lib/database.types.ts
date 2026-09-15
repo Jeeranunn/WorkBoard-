@@ -1,5 +1,5 @@
 // Hand-written to mirror supabase/migrations/0001_foundation.sql through
-// 0009_time_scope_correction.sql.
+// 0010_weekly_planner.sql.
 // Once a live Supabase project exists, regenerate with:
 //   npx supabase gen types typescript --project-id <id> > src/lib/database.types.ts
 
@@ -735,6 +735,116 @@ export interface Database {
         >;
         Relationships: [];
       };
+      personal_planner_items: {
+        Row: {
+          id: string;
+          person_id: string;
+          title: string;
+          notes: string | null;
+          is_important: boolean;
+          is_urgent: boolean;
+          deadline: string | null;
+          estimated_hours: number | null;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          person_id: string;
+          title: string;
+          notes?: string | null;
+          is_important?: boolean;
+          is_urgent?: boolean;
+          deadline?: string | null;
+          estimated_hours?: number | null;
+          completed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["personal_planner_items"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      availability: {
+        Row: {
+          id: string;
+          person_id: string;
+          date: string;
+          start_time: string;
+          end_time: string;
+          status: "free" | "busy" | "maybe";
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          person_id: string;
+          date: string;
+          start_time: string;
+          end_time: string;
+          status: "free" | "busy" | "maybe";
+          note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["availability"]["Insert"]>;
+        Relationships: [];
+      };
+      planned_slots: {
+        Row: {
+          id: string;
+          person_id: string;
+          workboard_task_id: string | null;
+          personal_planner_item_id: string | null;
+          date: string;
+          start_time: string;
+          end_time: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          person_id: string;
+          workboard_task_id?: string | null;
+          personal_planner_item_id?: string | null;
+          date: string;
+          start_time: string;
+          end_time: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["planned_slots"]["Insert"]>;
+        Relationships: [];
+      };
+      suggestions: {
+        Row: {
+          id: string;
+          task_id: string;
+          suggested_by: string;
+          suggested_is_important: boolean;
+          suggested_is_urgent: boolean;
+          reason: string | null;
+          status: "pending" | "accepted" | "rejected";
+          created_at: string;
+          responded_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          suggested_by: string;
+          suggested_is_important: boolean;
+          suggested_is_urgent: boolean;
+          reason?: string | null;
+          status?: "pending" | "accepted" | "rejected";
+          created_at?: string;
+          responded_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["suggestions"]["Insert"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -883,6 +993,14 @@ export interface Database {
       time_correction_target_person: {
         Args: { p_target_table: string; p_target_id: string };
         Returns: string;
+      };
+      is_chair: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      respond_to_suggestion: {
+        Args: { p_suggestion_id: string; p_status: string };
+        Returns: Database["public"]["Tables"]["suggestions"]["Row"];
       };
     };
     Enums: {
