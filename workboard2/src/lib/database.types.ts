@@ -33,6 +33,7 @@ export type TaskStatus =
   | "COMPLETED"
   | "CANCELLED";
 export type PriorityLevel = "P1" | "P2" | "P3" | "P4";
+export type TimeEntrySource = "SYSTEM_TRACKED" | "RECONSTRUCTED" | "SELF_DECLARED";
 
 export interface Database {
   public: {
@@ -635,6 +636,106 @@ export interface Database {
         >;
         Relationships: [];
       };
+      attendance_sessions: {
+        Row: {
+          id: string;
+          person_id: string;
+          clock_in_at: string;
+          clock_out_at: string | null;
+          source: TimeEntrySource;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          person_id: string;
+          clock_in_at: string;
+          clock_out_at?: string | null;
+          source?: TimeEntrySource;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["attendance_sessions"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      attendance_breaks: {
+        Row: {
+          id: string;
+          attendance_session_id: string;
+          break_start_at: string;
+          break_end_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          attendance_session_id: string;
+          break_start_at: string;
+          break_end_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["attendance_breaks"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      task_time_entries: {
+        Row: {
+          id: string;
+          task_id: string;
+          person_id: string;
+          started_at: string;
+          ended_at: string | null;
+          source: TimeEntrySource;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          person_id: string;
+          started_at: string;
+          ended_at?: string | null;
+          source?: TimeEntrySource;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["task_time_entries"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      time_corrections: {
+        Row: {
+          id: string;
+          target_table: string;
+          target_id: string;
+          field_name: string;
+          old_value: string | null;
+          new_value: string | null;
+          reason: string | null;
+          corrected_by_person_id: string;
+          corrected_at: string;
+        };
+        Insert: {
+          id?: string;
+          target_table: string;
+          target_id: string;
+          field_name: string;
+          old_value?: string | null;
+          new_value?: string | null;
+          reason?: string | null;
+          corrected_by_person_id: string;
+          corrected_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["time_corrections"]["Insert"]
+        >;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -726,6 +827,52 @@ export interface Database {
         Args: { p_project_id: string; p_playbook_id: string };
         Returns: number;
       };
+      clock_in: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["attendance_sessions"]["Row"];
+      };
+      start_break: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["attendance_breaks"]["Row"];
+      };
+      resume_from_break: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["attendance_breaks"]["Row"];
+      };
+      clock_out: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["attendance_sessions"]["Row"];
+      };
+      start_task_timer: {
+        Args: { p_task_id: string };
+        Returns: Database["public"]["Tables"]["task_time_entries"]["Row"];
+      };
+      pause_task_timer: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["task_time_entries"]["Row"];
+      };
+      switch_task_timer: {
+        Args: { p_task_id: string };
+        Returns: Database["public"]["Tables"]["task_time_entries"]["Row"];
+      };
+      correct_attendance_session: {
+        Args: {
+          p_session_id: string;
+          p_clock_in_at: string;
+          p_clock_out_at: string | null;
+          p_reason?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["attendance_sessions"]["Row"];
+      };
+      correct_task_time_entry: {
+        Args: {
+          p_entry_id: string;
+          p_started_at: string;
+          p_ended_at: string | null;
+          p_reason?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["task_time_entries"]["Row"];
+      };
     };
     Enums: {
       app_role: AppRole;
@@ -736,6 +883,7 @@ export interface Database {
       work_origin: WorkOrigin;
       task_status: TaskStatus;
       priority_level: PriorityLevel;
+      time_entry_source: TimeEntrySource;
     };
   };
 }
