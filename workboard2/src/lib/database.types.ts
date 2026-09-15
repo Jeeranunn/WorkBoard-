@@ -291,6 +291,7 @@ export interface Database {
           work_origin: WorkOrigin;
           is_active: boolean;
           archived_at: string | null;
+          source_playbook_workstream_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -303,6 +304,7 @@ export interface Database {
           work_origin?: WorkOrigin;
           is_active?: boolean;
           archived_at?: string | null;
+          source_playbook_workstream_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -344,6 +346,7 @@ export interface Database {
           workstream_id: string | null;
           milestone_id: string | null;
           parent_task_id: string | null;
+          source_playbook_task_id: string | null;
           title: string;
           description: string | null;
           deliverable: string | null;
@@ -376,6 +379,7 @@ export interface Database {
           workstream_id?: string | null;
           milestone_id?: string | null;
           parent_task_id?: string | null;
+          source_playbook_task_id?: string | null;
           title: string;
           description?: string | null;
           deliverable?: string | null;
@@ -537,6 +541,100 @@ export interface Database {
         >;
         Relationships: [];
       };
+      playbooks: {
+        Row: {
+          id: string;
+          key: string;
+          name: string;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          key: string;
+          name: string;
+          description?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["playbooks"]["Insert"]>;
+        Relationships: [];
+      };
+      playbook_workstreams: {
+        Row: {
+          id: string;
+          playbook_id: string;
+          name: string;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          playbook_id: string;
+          name: string;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["playbook_workstreams"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      playbook_tasks: {
+        Row: {
+          id: string;
+          playbook_id: string;
+          playbook_workstream_id: string | null;
+          title: string;
+          description: string | null;
+          deliverable: string | null;
+          completion_criteria: string | null;
+          requires_reviewer: boolean;
+          tag: string | null;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          playbook_id: string;
+          playbook_workstream_id?: string | null;
+          title: string;
+          description?: string | null;
+          deliverable?: string | null;
+          completion_criteria?: string | null;
+          requires_reviewer?: boolean;
+          tag?: string | null;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["playbook_tasks"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      playbook_conditional_rules: {
+        Row: {
+          id: string;
+          playbook_id: string;
+          if_tag: string;
+          then_tag: string;
+          message: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          playbook_id: string;
+          if_tag: string;
+          then_tag: string;
+          message: string;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["playbook_conditional_rules"]["Insert"]
+        >;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -623,6 +721,10 @@ export interface Database {
       submit_for_approval: {
         Args: { p_task_id: string };
         Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      apply_playbook_to_project: {
+        Args: { p_project_id: string; p_playbook_id: string };
+        Returns: number;
       };
     };
     Enums: {
