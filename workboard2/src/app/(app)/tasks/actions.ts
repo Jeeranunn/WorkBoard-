@@ -90,6 +90,33 @@ export async function completeTaskAction(formData: FormData) {
   await callTaskRpc(taskId, "complete_task", { p_task_id: taskId });
 }
 
+export async function startTaskTimerAction(formData: FormData) {
+  const taskId = str(formData, "task_id");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("start_task_timer", { p_task_id: taskId });
+  if (error) throw new Error(error.message);
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath("/my-work");
+}
+
+export async function switchTaskTimerAction(formData: FormData) {
+  const taskId = str(formData, "task_id");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("switch_task_timer", { p_task_id: taskId });
+  if (error) throw new Error(error.message);
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath("/my-work");
+}
+
+export async function pauseTaskTimerAction(formData: FormData) {
+  const taskId = optionalStr(formData, "task_id");
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("pause_task_timer");
+  if (error) throw new Error(error.message);
+  if (taskId) revalidatePath(`/tasks/${taskId}`);
+  revalidatePath("/my-work");
+}
+
 export async function addCommentAction(formData: FormData) {
   const taskId = str(formData, "task_id");
   const body = str(formData, "body");

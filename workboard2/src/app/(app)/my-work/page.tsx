@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { ACTIVE_TASK_STATUSES } from "@/lib/task-labels";
@@ -6,6 +7,20 @@ import {
   type TaskListRow,
 } from "@/components/tasks/task-list-section";
 import type { PriorityLevel, TaskStatus } from "@/lib/database.types";
+import {
+  clockInAction,
+  startBreakAction,
+  resumeFromBreakAction,
+  clockOutAction,
+} from "./actions";
+import { pauseTaskTimerAction } from "../tasks/actions";
+
+function formatTime(value: string): string {
+  return new Date(value).toLocaleString("th-TH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
 
 interface RawTask {
   id: string;
@@ -128,6 +143,33 @@ export default async function MyWorkPage() {
     (holders ?? []).map((h) => [h.id, h.full_name]),
   );
 
+  const { data: attendanceSession } = await supabase
+    .from("attendance_sessions")
+    .select("id, clock_in_at")
+    .eq("person_id", personId)
+    .is("clock_out_at", null)
+    .maybeSingle();
+
+  const { data: activeBreak } = attendanceSession
+    ? await supabase
+        .from("attendance_breaks")
+        .select("id, break_start_at")
+        .eq("attendance_session_id", attendanceSession.id)
+        .is("break_end_at", null)
+        .maybeSingle()
+    : { data: null };
+
+  const { data: activeTimer } = await supabase
+    .from("task_time_entries")
+    .select("id, task_id, started_at")
+    .eq("person_id", personId)
+    .is("ended_at", null)
+    .maybeSingle();
+
+  const { data: activeTimerTask } = activeTimer
+    ? await supabase.from("tasks").select("id, title").eq("id", activeTimer.task_id).maybeSingle()
+    : { data: null };
+
   function toRows(tasks: RawTask[] | null): TaskListRow[] {
     return (tasks ?? []).map((t) => ({
       id: t.id,
@@ -151,6 +193,68 @@ export default async function MyWorkPage() {
           สวัสดี {user.fullName} — นี่คือสิ่งที่ต้องทำตอนนี้
         </p>
       </div>
+
+      <section className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-4">
+        <div className="text-sm">
+          {!attendanceSession && <span className="text-slate-400">ยังไม่ได้ Clock In</span>}
+          {attendanceSession && !activeBreak && (
+            <span>เข้างานเมื่อ {formatTime(attendanceSession.clock_in_at)}</span>
+          )}
+          {attendanceSession && activeBreak && (
+            <span className="text-amber-600">
+              กำลังพักตั้งแต่ {formatTime(activeBreak.break_start_at)}
+            </span>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {!attendanceSession && (
+            <form action={clockInAction}>
+              <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                Clock In
+              </button>
+            </form>
+          )}
+          {attendanceSession && !activeBreak && (
+            <form action={startBreakAction}>
+              <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
+                พัก
+              </button>
+            </form>
+          )}
+          {attendanceSession && activeBreak && (
+            <form action={resumeFromBreakAction}>
+              <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                กลับมาทำงาน
+              </button>
+            </form>
+          )}
+          {attendanceSession && (
+            <form action={clockOutAction}>
+              <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
+                Clock Out
+              </button>
+            </form>
+          )}
+        </div>
+      </section>
+
+      {activeTimer && activeTimerTask && (
+        <section className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm">
+          <span>
+            กำลังทำงาน:{" "}
+            <Link href={`/tasks/${activeTimerTask.id}`} className="font-medium hover:underline">
+              {activeTimerTask.title}
+            </Link>{" "}
+            (เริ่มเมื่อ {formatTime(activeTimer.started_at)})
+          </span>
+          <form action={pauseTaskTimerAction}>
+            <input type="hidden" name="task_id" value={activeTimerTask.id} />
+            <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
+              หยุดชั่วคราว
+            </button>
+          </form>
+        </section>
+      )}
 
       <TaskListSection
         title="เกินกำหนด"

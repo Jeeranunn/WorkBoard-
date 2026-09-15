@@ -13,6 +13,9 @@ import {
   submitForApprovalAction,
   approveTaskAction,
   completeTaskAction,
+  startTaskTimerAction,
+  switchTaskTimerAction,
+  pauseTaskTimerAction,
   addCommentAction,
 } from "../actions";
 
@@ -170,6 +173,13 @@ export default async function TaskDetailPage(
     hasRole(user, "ADMIN") ||
     task.current_holder_person_id === user.personId ||
     hasRoleInOrganization(user, "HEAD", project.organization_id);
+
+  const { data: myActiveTimer } = await supabase
+    .from("task_time_entries")
+    .select("id, task_id, started_at")
+    .eq("person_id", user.personId)
+    .is("ended_at", null)
+    .maybeSingle();
 
   interface ActivityItem {
     at: string;
@@ -438,6 +448,41 @@ export default async function TaskDetailPage(
               <p className="text-sm text-slate-400">งานนี้จบแล้ว ไม่มีการดำเนินการเพิ่มเติม</p>
             )}
           </section>
+
+          {isAssigneeSide && (
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <h2 className="mb-2 text-sm font-semibold">เวลาในงานนี้</h2>
+              {myActiveTimer?.task_id === task.id ? (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-emerald-600">
+                    กำลังจับเวลาอยู่ (เริ่มเมื่อ {formatDateTime(myActiveTimer.started_at)})
+                  </span>
+                  <form action={pauseTaskTimerAction}>
+                    <input type="hidden" name="task_id" value={task.id} />
+                    <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
+                      หยุดชั่วคราว
+                    </button>
+                  </form>
+                </div>
+              ) : myActiveTimer ? (
+                <form action={switchTaskTimerAction} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">กำลังจับเวลางานอื่นอยู่</span>
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                    สลับมาจับเวลางานนี้
+                  </button>
+                </form>
+              ) : (
+                <form action={startTaskTimerAction} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">ยังไม่ได้เริ่มจับเวลา</span>
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                    เริ่มจับเวลางานนี้
+                  </button>
+                </form>
+              )}
+            </section>
+          )}
 
           {/* Activity feed */}
           <section className="rounded-lg border border-slate-200 bg-white p-4">

@@ -37,7 +37,7 @@ export default async function TeamDetailPage(
 
   const memberIds = (memberships ?? []).map((m) => m.person_id);
 
-  const [{ data: people }, { data: projects }, { data: tasks }] = await Promise.all([
+  const [{ data: people }, { data: projects }, { data: tasks }, { data: activeTimers }] = await Promise.all([
     memberIds.length
       ? supabase.from("people").select("id, full_name").in("id", memberIds)
       : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
@@ -62,6 +62,13 @@ export default async function TeamDetailPage(
             deadline: string | null;
           }[],
         }),
+    memberIds.length
+      ? supabase
+          .from("task_time_entries")
+          .select("person_id")
+          .in("person_id", memberIds)
+          .is("ended_at", null)
+      : Promise.resolve({ data: [] as { person_id: string }[] }),
   ]);
 
   const nameById = new Map((people ?? []).map((p) => [p.id, p.full_name]));
@@ -116,7 +123,13 @@ export default async function TeamDetailPage(
         </section>
       )}
 
-      <section className="grid gap-4 sm:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-5">
+        <div className="rounded-lg border border-slate-200 bg-white p-4">
+          <div className="text-xs text-slate-400">กำลังทำงานอยู่ตอนนี้</div>
+          <div className="text-2xl font-semibold text-emerald-600">
+            {new Set((activeTimers ?? []).map((t) => t.person_id)).size}
+          </div>
+        </div>
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <div className="text-xs text-slate-400">งานค้างทั้งหมด</div>
           <div className="text-2xl font-semibold">{activeTasks.length}</div>
