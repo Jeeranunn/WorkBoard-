@@ -10,6 +10,7 @@ import {
   beginReviewAction,
   requestRevisionAction,
   resubmitTaskAction,
+  submitForApprovalAction,
   approveTaskAction,
   completeTaskAction,
   addCommentAction,
@@ -340,7 +341,24 @@ export default async function TaskDetailPage(
                     </button>
                   </form>
                 )}
-              {task.status === "IN_REVIEW" && isHolderSide && (
+              {task.status === "IN_REVIEW" &&
+                isHolderSide &&
+                (task.approver_person_id ? (
+                  <form action={submitForApprovalAction}>
+                    <input type="hidden" name="task_id" value={task.id} />
+                    <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                      ส่งต่อผู้อนุมัติ
+                    </button>
+                  </form>
+                ) : (
+                  <form action={approveTaskAction}>
+                    <input type="hidden" name="task_id" value={task.id} />
+                    <button className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
+                      อนุมัติ
+                    </button>
+                  </form>
+                ))}
+              {task.status === "PENDING_APPROVAL" && isHolderSide && (
                 <form action={approveTaskAction}>
                   <input type="hidden" name="task_id" value={task.id} />
                   <button className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">

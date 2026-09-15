@@ -22,6 +22,7 @@ async function callTaskRpc(
     | "begin_review"
     | "request_revision"
     | "resubmit_task"
+    | "submit_for_approval"
     | "approve_task"
     | "complete_task",
   args: Record<string, unknown>,
@@ -72,6 +73,11 @@ export async function resubmitTaskAction(formData: FormData) {
     p_message: optionalStr(formData, "message"),
     p_link: optionalStr(formData, "link"),
   });
+}
+
+export async function submitForApprovalAction(formData: FormData) {
+  const taskId = str(formData, "task_id");
+  await callTaskRpc(taskId, "submit_for_approval", { p_task_id: taskId });
 }
 
 export async function approveTaskAction(formData: FormData) {

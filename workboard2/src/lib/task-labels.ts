@@ -8,6 +8,7 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   IN_REVIEW: "กำลังตรวจ",
   REVISION_REQUIRED: "ต้องแก้ไข",
   RESUBMITTED: "ส่งงานใหม่แล้ว",
+  PENDING_APPROVAL: "รออนุมัติ",
   APPROVED: "อนุมัติแล้ว",
   COMPLETED: "เสร็จสมบูรณ์",
   CANCELLED: "ยกเลิก",
@@ -28,6 +29,7 @@ export const ACTIVE_TASK_STATUSES: TaskStatus[] = [
   "IN_REVIEW",
   "REVISION_REQUIRED",
   "RESUBMITTED",
+  "PENDING_APPROVAL",
 ];
 
 export const TERMINAL_TASK_STATUSES: TaskStatus[] = [

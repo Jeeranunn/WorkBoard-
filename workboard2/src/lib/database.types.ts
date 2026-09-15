@@ -28,6 +28,7 @@ export type TaskStatus =
   | "IN_REVIEW"
   | "REVISION_REQUIRED"
   | "RESUBMITTED"
+  | "PENDING_APPROVAL"
   | "APPROVED"
   | "COMPLETED"
   | "CANCELLED";
@@ -616,6 +617,10 @@ export interface Database {
         Returns: Database["public"]["Tables"]["tasks"]["Row"];
       };
       complete_task: {
+        Args: { p_task_id: string };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      submit_for_approval: {
         Args: { p_task_id: string };
         Returns: Database["public"]["Tables"]["tasks"]["Row"];
       };
