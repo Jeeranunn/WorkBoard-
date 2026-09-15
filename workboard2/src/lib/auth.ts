@@ -1,0 +1,87 @@
+import "server-only";
+import { createClient } from "@/lib/supabase/server";
+import type { AppRole } from "@/lib/database.types";
+
+export interface RoleGrant {
+  role: AppRole;
+  organizationId: string | null;
+}
+
+export interface CurrentUser {
+  personId: string;
+  fullName: string;
+  email: string;
+  roles: RoleGrant[];
+}
+
+/**
+ * Resolves the signed-in Supabase auth user to a `people` row and their
+ * granted roles. Returns null when there is no session or no matching
+ * person row yet (e.g. an auth user created before an admin linked them).
+ */
+export async function getCurrentUser(): Promise<CurrentUser | null> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return null;
+
+  const { data: person } = await supabase
+    .from("people")
+    .select("id, full_name, email")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+
+  if (!person) return null;
+
+  const { data: roleRows } = await supabase
+    .from("person_roles")
+    .select("role, organization_id")
+    .eq("person_id", person.id);
+
+  return {
+    personId: person.id,
+    fullName: person.full_name,
+    email: person.email,
+    roles: (roleRows ?? []).map((r) => ({
+      role: r.role,
+      organizationId: r.organization_id,
+    })),
+  };
+}
+
+/**
+ * Global role check (ADMIN/EXECUTIVE only — these always have
+ * organization_id null, per the DB CHECK constraint). Do not use this for
+ * HEAD/MEMBER: those are org-scoped, so use `hasRoleInOrganization` instead
+ * — a HEAD of Organization A must not pass a check meant for Organization B.
+ */
+export function hasRole(user: CurrentUser | null, role: AppRole): boolean {
+  return user?.roles.some((r) => r.role === role) ?? false;
+}
+
+export function hasRoleInOrganization(
+  user: CurrentUser | null,
+  role: AppRole,
+  organizationId: string,
+): boolean {
+  return (
+    user?.roles.some(
+      (r) => r.role === role && r.organizationId === organizationId,
+    ) ?? false
+  );
+}
+
+/**
+ * Defense-in-depth check for admin-only pages/actions. This is a UX guard,
+ * not the security boundary — Row Level Security (`is_admin()` policies)
+ * is what actually enforces this in the database.
+ */
+export async function requireAdmin(): Promise<CurrentUser> {
+  const user = await getCurrentUser();
+  if (!user || !hasRole(user, "ADMIN")) {
+    throw new Error("ต้องเป็นผู้ดูแลระบบเท่านั้น");
+  }
+  return user;
+}

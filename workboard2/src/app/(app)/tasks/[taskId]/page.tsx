@@ -1,0 +1,592 @@
+import { notFound } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser, hasRole, hasRoleInOrganization } from "@/lib/auth";
+import { TASK_STATUS_LABELS, WORK_ORIGIN_LABELS } from "@/lib/task-labels";
+import type { PriorityLevel } from "@/lib/database.types";
+import {
+  acknowledgeTaskAction,
+  startTaskAction,
+  submitTaskAction,
+  beginReviewAction,
+  requestRevisionAction,
+  resubmitTaskAction,
+  submitForApprovalAction,
+  approveTaskAction,
+  completeTaskAction,
+  startTaskTimerAction,
+  switchTaskTimerAction,
+  pauseTaskTimerAction,
+  addCommentAction,
+} from "../actions";
+
+const PRIORITY_STYLES: Record<PriorityLevel, string> = {
+  P1: "bg-red-100 text-red-700",
+  P2: "bg-amber-100 text-amber-700",
+  P3: "bg-sky-100 text-sky-700",
+  P4: "bg-slate-100 text-slate-600",
+};
+
+const HISTORY_FIELD_LABELS: Record<string, string> = {
+  status: "สถานะ",
+  assignee_person_id: "ผู้รับผิดชอบ",
+  reviewer_person_id: "ผู้ตรวจ",
+  approver_person_id: "ผู้อนุมัติ",
+  deadline: "กำหนดส่ง",
+};
+
+const PERSON_FIELDS = new Set([
+  "assignee_person_id",
+  "reviewer_person_id",
+  "approver_person_id",
+]);
+
+function formatDateTime(value: string | null): string {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("th-TH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+export default async function TaskDetailPage(
+  props: PageProps<"/tasks/[taskId]">,
+) {
+  const { taskId } = await props.params;
+
+  const user = await getCurrentUser();
+  if (!user) return null;
+
+  const supabase = await createClient();
+
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (!task) notFound();
+
+  const [
+    { data: project },
+    { data: workstream },
+    { data: milestone },
+    { data: collaboratorRows },
+    { data: predecessorLinks },
+    { data: successorLinks },
+    { data: submissions },
+    { data: comments },
+    { data: history },
+  ] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("id, name, organization_id")
+      .eq("id", task.project_id)
+      .single(),
+    task.workstream_id
+      ? supabase
+          .from("workstreams")
+          .select("id, name")
+          .eq("id", task.workstream_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    task.milestone_id
+      ? supabase
+          .from("milestones")
+          .select("id, name")
+          .eq("id", task.milestone_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase.from("task_collaborators").select("person_id").eq("task_id", taskId),
+    supabase
+      .from("task_dependencies")
+      .select("predecessor_task_id")
+      .eq("successor_task_id", taskId),
+    supabase
+      .from("task_dependencies")
+      .select("successor_task_id")
+      .eq("predecessor_task_id", taskId),
+    supabase
+      .from("task_submissions")
+      .select("id, version, message, link, submitted_by_person_id, submitted_at")
+      .eq("task_id", taskId)
+      .order("version", { ascending: false }),
+    supabase
+      .from("task_comments")
+      .select("id, author_person_id, body, is_question, created_at")
+      .eq("task_id", taskId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("task_history")
+      .select("id, changed_by_person_id, field_name, old_value, new_value, changed_at")
+      .eq("task_id", taskId)
+      .order("changed_at", { ascending: true }),
+  ]);
+
+  if (!project) notFound();
+
+  const predecessorIds = (predecessorLinks ?? []).map((l) => l.predecessor_task_id);
+  const successorIds = (successorLinks ?? []).map((l) => l.successor_task_id);
+
+  const [{ data: predecessorTasks }, { data: successorTasks }] = await Promise.all([
+    predecessorIds.length
+      ? supabase.from("tasks").select("id, title, status").in("id", predecessorIds)
+      : Promise.resolve({ data: [] as { id: string; title: string; status: string }[] }),
+    successorIds.length
+      ? supabase.from("tasks").select("id, title, status").in("id", successorIds)
+      : Promise.resolve({ data: [] as { id: string; title: string; status: string }[] }),
+  ]);
+
+  const personIds = new Set<string>();
+  [
+    task.assignee_person_id,
+    task.reviewer_person_id,
+    task.approver_person_id,
+    task.current_holder_person_id,
+  ].forEach((id) => id && personIds.add(id));
+  (collaboratorRows ?? []).forEach((c) => personIds.add(c.person_id));
+  (submissions ?? []).forEach((s) => personIds.add(s.submitted_by_person_id));
+  (comments ?? []).forEach((c) => personIds.add(c.author_person_id));
+  (history ?? []).forEach((h) => {
+    if (h.changed_by_person_id) personIds.add(h.changed_by_person_id);
+    if (PERSON_FIELDS.has(h.field_name)) {
+      if (h.old_value) personIds.add(h.old_value);
+      if (h.new_value) personIds.add(h.new_value);
+    }
+  });
+
+  const { data: peopleRows } = personIds.size
+    ? await supabase
+        .from("people")
+        .select("id, full_name")
+        .in("id", [...personIds])
+    : { data: [] as { id: string; full_name: string }[] };
+
+  const nameById = new Map((peopleRows ?? []).map((p) => [p.id, p.full_name]));
+  const name = (id: string | null) => (id ? (nameById.get(id) ?? "-") : "-");
+
+  const isAssigneeSide =
+    hasRole(user, "ADMIN") ||
+    task.assignee_person_id === user.personId ||
+    hasRoleInOrganization(user, "HEAD", project.organization_id);
+
+  const isHolderSide =
+    hasRole(user, "ADMIN") ||
+    task.current_holder_person_id === user.personId ||
+    hasRoleInOrganization(user, "HEAD", project.organization_id);
+
+  const { data: myActiveTimer } = await supabase
+    .from("task_time_entries")
+    .select("id, task_id, started_at")
+    .eq("person_id", user.personId)
+    .is("ended_at", null)
+    .maybeSingle();
+
+  interface ActivityItem {
+    at: string;
+    node: React.ReactNode;
+  }
+
+  const activity: ActivityItem[] = [];
+
+  for (const h of history ?? []) {
+    const label = HISTORY_FIELD_LABELS[h.field_name] ?? h.field_name;
+    const from = PERSON_FIELDS.has(h.field_name)
+      ? name(h.old_value)
+      : h.field_name === "deadline"
+        ? formatDateTime(h.old_value)
+        : h.field_name === "status"
+          ? (TASK_STATUS_LABELS[h.old_value as keyof typeof TASK_STATUS_LABELS] ?? h.old_value ?? "-")
+          : (h.old_value ?? "-");
+    const to = PERSON_FIELDS.has(h.field_name)
+      ? name(h.new_value)
+      : h.field_name === "deadline"
+        ? formatDateTime(h.new_value)
+        : h.field_name === "status"
+          ? (TASK_STATUS_LABELS[h.new_value as keyof typeof TASK_STATUS_LABELS] ?? h.new_value ?? "-")
+          : (h.new_value ?? "-");
+    activity.push({
+      at: h.changed_at,
+      node: (
+        <p>
+          <span className="font-medium">{name(h.changed_by_person_id)}</span>{" "}
+          เปลี่ยน{label}จาก &ldquo;{from}&rdquo; เป็น &ldquo;{to}&rdquo;
+        </p>
+      ),
+    });
+  }
+
+  for (const c of comments ?? []) {
+    activity.push({
+      at: c.created_at,
+      node: (
+        <p>
+          <span className="font-medium">{name(c.author_person_id)}</span>
+          {c.is_question && (
+            <span className="ml-1 rounded bg-amber-100 px-1 text-xs text-amber-700">
+              คำถาม
+            </span>
+          )}
+          : {c.body}
+        </p>
+      ),
+    });
+  }
+
+  for (const s of submissions ?? []) {
+    activity.push({
+      at: s.submitted_at,
+      node: (
+        <p>
+          <span className="font-medium">{name(s.submitted_by_person_id)}</span>{" "}
+          ส่งงาน (เวอร์ชัน {s.version}) {s.message && `— ${s.message}`}{" "}
+          {s.link && (
+            <a
+              href={s.link}
+              className="text-sky-600 underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ลิงก์ผลงาน
+            </a>
+          )}
+        </p>
+      ),
+    });
+  }
+
+  activity.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <div className="text-xs text-slate-400">
+          {project.name}
+          {workstream && ` / ${workstream.name}`}
+          {milestone && ` / ${milestone.name}`}
+        </div>
+        <h1 className="text-xl font-semibold">{task.title}</h1>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+          <span
+            className={`rounded px-1.5 py-0.5 font-medium ${PRIORITY_STYLES[task.priority]}`}
+          >
+            {task.priority}
+          </span>
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">
+            {TASK_STATUS_LABELS[task.status]}
+          </span>
+          <span className="text-slate-400">
+            {WORK_ORIGIN_LABELS[task.work_origin]}
+          </span>
+          {task.is_blocked && (
+            <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700">
+              ติดขัด{task.blocked_reason ? `: ${task.blocked_reason}` : ""}
+            </span>
+          )}
+          {task.is_waiting && (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-700">
+              รอ{task.waiting_reason ? `: ${task.waiting_reason}` : ""}
+            </span>
+          )}
+          {task.is_on_hold && (
+            <span className="rounded bg-slate-200 px-1.5 py-0.5 text-slate-700">
+              พักไว้{task.on_hold_reason ? `: ${task.on_hold_reason}` : ""}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-3">
+        <div className="space-y-6 md:col-span-2">
+          <section className="rounded-lg border border-slate-200 bg-white p-4">
+            <h2 className="mb-2 text-sm font-semibold">รายละเอียด</h2>
+            <p className="whitespace-pre-wrap text-sm text-slate-600">
+              {task.description || "-"}
+            </p>
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-xs text-slate-400">Deliverable</dt>
+                <dd>{task.deliverable || "-"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">เกณฑ์ความสำเร็จ</dt>
+                <dd>{task.completion_criteria || "-"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">กำหนดส่ง</dt>
+                <dd>{formatDateTime(task.deadline)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">ที่มา</dt>
+                <dd>{task.source || "-"}</dd>
+              </div>
+            </dl>
+          </section>
+
+          {/* Workflow actions */}
+          <section className="rounded-lg border border-slate-200 bg-white p-4">
+            <h2 className="mb-3 text-sm font-semibold">การดำเนินการ</h2>
+            <div className="flex flex-wrap gap-2">
+              {task.status === "ASSIGNED" && isAssigneeSide && (
+                <form action={acknowledgeTaskAction}>
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                    รับทราบงาน
+                  </button>
+                </form>
+              )}
+              {task.status === "ACKNOWLEDGED" && isAssigneeSide && (
+                <form action={startTaskAction}>
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                    เริ่มทำงาน
+                  </button>
+                </form>
+              )}
+              {(task.status === "SUBMITTED" || task.status === "RESUBMITTED") &&
+                isHolderSide && (
+                  <form action={beginReviewAction}>
+                    <input type="hidden" name="task_id" value={task.id} />
+                    <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                      เริ่มตรวจงาน
+                    </button>
+                  </form>
+                )}
+              {task.status === "IN_REVIEW" &&
+                isHolderSide &&
+                (task.approver_person_id ? (
+                  <form action={submitForApprovalAction}>
+                    <input type="hidden" name="task_id" value={task.id} />
+                    <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                      ส่งต่อผู้อนุมัติ
+                    </button>
+                  </form>
+                ) : (
+                  <form action={approveTaskAction}>
+                    <input type="hidden" name="task_id" value={task.id} />
+                    <button className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
+                      อนุมัติ
+                    </button>
+                  </form>
+                ))}
+              {task.status === "PENDING_APPROVAL" && isHolderSide && (
+                <form action={approveTaskAction}>
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <button className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
+                    อนุมัติ
+                  </button>
+                </form>
+              )}
+              {task.status === "APPROVED" && isAssigneeSide && (
+                <form action={completeTaskAction}>
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <button className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
+                    ปิดงาน
+                  </button>
+                </form>
+              )}
+            </div>
+
+            {task.status === "IN_PROGRESS" && isAssigneeSide && (
+              <form action={submitTaskAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
+                <input type="hidden" name="task_id" value={task.id} />
+                <label className="text-xs font-medium text-slate-500">ส่งงาน</label>
+                <textarea
+                  name="message"
+                  placeholder="ข้อความตอนส่งงาน"
+                  className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                  rows={2}
+                />
+                <input
+                  name="link"
+                  placeholder="ลิงก์ผลงาน (ถ้ามี)"
+                  className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                />
+                <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                  ส่งงาน
+                </button>
+              </form>
+            )}
+
+            {task.status === "REVISION_REQUIRED" && isAssigneeSide && (
+              <form action={resubmitTaskAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
+                <input type="hidden" name="task_id" value={task.id} />
+                <label className="text-xs font-medium text-slate-500">ส่งงานใหม่</label>
+                <textarea
+                  name="message"
+                  placeholder="ข้อความตอนส่งงานใหม่"
+                  className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                  rows={2}
+                />
+                <input
+                  name="link"
+                  placeholder="ลิงก์ผลงาน (ถ้ามี)"
+                  className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                />
+                <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                  ส่งงานใหม่
+                </button>
+              </form>
+            )}
+
+            {task.status === "IN_REVIEW" && isHolderSide && (
+              <form action={requestRevisionAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
+                <input type="hidden" name="task_id" value={task.id} />
+                <label className="text-xs font-medium text-slate-500">ขอให้แก้ไข</label>
+                <textarea
+                  name="note"
+                  placeholder="ระบุสิ่งที่ต้องแก้ไข"
+                  className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                  rows={2}
+                />
+                <button className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700">
+                  ขอให้แก้ไข
+                </button>
+              </form>
+            )}
+
+            {["COMPLETED", "CANCELLED"].includes(task.status) && (
+              <p className="text-sm text-slate-400">งานนี้จบแล้ว ไม่มีการดำเนินการเพิ่มเติม</p>
+            )}
+          </section>
+
+          {isAssigneeSide && (
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <h2 className="mb-2 text-sm font-semibold">เวลาในงานนี้</h2>
+              {myActiveTimer?.task_id === task.id ? (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-emerald-600">
+                    กำลังจับเวลาอยู่ (เริ่มเมื่อ {formatDateTime(myActiveTimer.started_at)})
+                  </span>
+                  <form action={pauseTaskTimerAction}>
+                    <input type="hidden" name="task_id" value={task.id} />
+                    <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
+                      หยุดชั่วคราว
+                    </button>
+                  </form>
+                </div>
+              ) : myActiveTimer ? (
+                <form action={switchTaskTimerAction} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">กำลังจับเวลางานอื่นอยู่</span>
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                    สลับมาจับเวลางานนี้
+                  </button>
+                </form>
+              ) : (
+                <form action={startTaskTimerAction} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-400">ยังไม่ได้เริ่มจับเวลา</span>
+                  <input type="hidden" name="task_id" value={task.id} />
+                  <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                    เริ่มจับเวลางานนี้
+                  </button>
+                </form>
+              )}
+            </section>
+          )}
+
+          {/* Activity feed */}
+          <section className="rounded-lg border border-slate-200 bg-white p-4">
+            <h2 className="mb-3 text-sm font-semibold">กิจกรรม</h2>
+            <div className="space-y-3 text-sm">
+              {activity.length === 0 && (
+                <p className="text-slate-400">ยังไม่มีความเคลื่อนไหว</p>
+              )}
+              {activity.map((item, i) => (
+                <div key={i} className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
+                  {item.node}
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    {formatDateTime(item.at)}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <form action={addCommentAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
+              <input type="hidden" name="task_id" value={task.id} />
+              <textarea
+                name="body"
+                placeholder="เขียนความคิดเห็นหรือคำถาม"
+                required
+                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                rows={2}
+              />
+              <label className="flex items-center gap-2 text-xs text-slate-500">
+                <input type="checkbox" name="is_question" />
+                เป็นคำถาม
+              </label>
+              <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
+                ส่งความคิดเห็น
+              </button>
+            </form>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
+            <h2 className="mb-3 text-sm font-semibold">ผู้เกี่ยวข้อง</h2>
+            <dl className="space-y-2">
+              <div>
+                <dt className="text-xs text-slate-400">ผู้รับผิดชอบ</dt>
+                <dd>{name(task.assignee_person_id)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">ผู้ตรวจ</dt>
+                <dd>{name(task.reviewer_person_id)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">ผู้อนุมัติ</dt>
+                <dd>{name(task.approver_person_id)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">ตอนนี้รออยู่ที่</dt>
+                <dd>{task.current_holder_person_id ? name(task.current_holder_person_id) : "ไม่มี (จบงานแล้ว)"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs text-slate-400">ผู้ร่วมงาน</dt>
+                <dd>
+                  {(collaboratorRows ?? []).length
+                    ? (collaboratorRows ?? []).map((c) => name(c.person_id)).join(", ")
+                    : "-"}
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
+            <h2 className="mb-3 text-sm font-semibold">Dependency</h2>
+            <div className="space-y-2">
+              <div>
+                <div className="text-xs text-slate-400">ต้องเสร็จก่อน</div>
+                {(predecessorTasks ?? []).length === 0 && (
+                  <p className="text-slate-400">ไม่มี</p>
+                )}
+                {(predecessorTasks ?? []).map((t) => (
+                  <p key={t.id}>
+                    {t.title} —{" "}
+                    <span className="text-xs text-slate-400">
+                      {TASK_STATUS_LABELS[t.status as keyof typeof TASK_STATUS_LABELS]}
+                    </span>
+                  </p>
+                ))}
+              </div>
+              <div>
+                <div className="text-xs text-slate-400">รองานนี้อยู่</div>
+                {(successorTasks ?? []).length === 0 && (
+                  <p className="text-slate-400">ไม่มี</p>
+                )}
+                {(successorTasks ?? []).map((t) => (
+                  <p key={t.id}>
+                    {t.title} —{" "}
+                    <span className="text-xs text-slate-400">
+                      {TASK_STATUS_LABELS[t.status as keyof typeof TASK_STATUS_LABELS]}
+                    </span>
+                  </p>
+                ))}
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
