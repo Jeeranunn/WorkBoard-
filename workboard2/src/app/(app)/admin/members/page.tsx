@@ -13,40 +13,45 @@ const ROLE_LABELS: Record<string, string> = {
   EXECUTIVE: "ประธาน",
 };
 
+const GLOBAL_ROLES = new Set(["ADMIN", "EXECUTIVE"]);
+
 export default async function MembersPage() {
   const supabase = await createClient();
 
   const [
     { data: people },
     { data: positions },
+    { data: organizations },
     { data: roles },
-    { data: workingTeams },
-    { data: projectTeams },
+    { data: teams },
     { data: memberships },
   ] = await Promise.all([
     supabase.from("people").select("id, full_name, email").order("full_name"),
     supabase.from("positions").select("id, title").order("title"),
-    supabase.from("person_roles").select("id, person_id, role"),
-    supabase.from("working_teams").select("id, name").order("name"),
-    supabase.from("project_teams").select("id, name").order("name"),
-    supabase
-      .from("team_memberships")
-      .select("id, person_id, team_kind, working_team_id, project_team_id"),
+    supabase.from("organizations").select("id, name").order("name"),
+    supabase.from("person_roles").select("id, person_id, role, organization_id"),
+    supabase.from("teams").select("id, name, team_type").order("name"),
+    supabase.from("team_memberships").select("id, person_id, team_id"),
   ]);
+
+  const orgName = (id: string | null) =>
+    organizations?.find((o) => o.id === id)?.name;
 
   const rolesByPerson = new Map<string, string[]>();
   for (const r of roles ?? []) {
+    const label = ROLE_LABELS[r.role] ?? r.role;
+    const text =
+      !GLOBAL_ROLES.has(r.role) && r.organization_id
+        ? `${label} (${orgName(r.organization_id) ?? "-"})`
+        : label;
     const list = rolesByPerson.get(r.person_id) ?? [];
-    list.push(ROLE_LABELS[r.role] ?? r.role);
+    list.push(text);
     rolesByPerson.set(r.person_id, list);
   }
 
   const teamsByPerson = new Map<string, string[]>();
   for (const m of memberships ?? []) {
-    const name =
-      m.team_kind === "WORKING"
-        ? workingTeams?.find((t) => t.id === m.working_team_id)?.name
-        : projectTeams?.find((t) => t.id === m.project_team_id)?.name;
+    const name = teams?.find((t) => t.id === m.team_id)?.name;
     if (!name) continue;
     const list = teamsByPerson.get(m.person_id) ?? [];
     list.push(name);
@@ -58,7 +63,8 @@ export default async function MembersPage() {
       <div>
         <h1 className="text-xl font-semibold">สมาชิกและบทบาท</h1>
         <p className="text-sm text-slate-500">
-          คนหนึ่งมีได้หลายบทบาท หลายตำแหน่ง และหลายทีมพร้อมกัน
+          คนหนึ่งมีได้หลายบทบาท หลายตำแหน่ง และหลายทีมพร้อมกัน — หัวหน้าฝ่าย/สมาชิก
+          เป็นบทบาทที่ผูกกับองค์กรใดองค์กรหนึ่งเสมอ
         </p>
       </div>
 
@@ -124,6 +130,9 @@ export default async function MembersPage() {
 
         <div className="rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="mb-3 text-sm font-semibold">มอบบทบาท</h2>
+          <p className="mb-2 text-xs text-slate-400">
+            หัวหน้าฝ่าย/สมาชิก ต้องเลือกองค์กร — ผู้ดูแลระบบ/ประธาน ไม่ต้องเลือก
+          </p>
           <form action={createPersonRole} className="flex flex-col gap-2">
             <select
               name="person_id"
@@ -145,6 +154,17 @@ export default async function MembersPage() {
               {Object.entries(ROLE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
+                </option>
+              ))}
+            </select>
+            <select
+              name="organization_id"
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            >
+              <option value="">ไม่ระบุองค์กร (สำหรับผู้ดูแลระบบ/ประธาน)</option>
+              {(organizations ?? []).map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
                 </option>
               ))}
             </select>
@@ -208,33 +228,18 @@ export default async function MembersPage() {
                 </option>
               ))}
             </select>
-            <div className="flex gap-2">
-              <select
-                name="team_kind"
-                required
-                className="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-              >
-                <option value="WORKING">Working Team</option>
-                <option value="PROJECT">Project Team</option>
-              </select>
-              <select
-                name="team_id"
-                required
-                className="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-              >
-                <option value="">เลือกทีม</option>
-                {(workingTeams ?? []).map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} (Working)
-                  </option>
-                ))}
-                {(projectTeams ?? []).map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} (Project)
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              name="team_id"
+              required
+              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            >
+              <option value="">เลือกทีม</option>
+              {(teams ?? []).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.team_type === "PROJECT" ? "Project" : "Working"})
+                </option>
+              ))}
+            </select>
             <input
               name="role_in_team"
               placeholder="บทบาทในทีม (ถ้ามี)"

@@ -2,11 +2,16 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/database.types";
 
+export interface RoleGrant {
+  role: AppRole;
+  organizationId: string | null;
+}
+
 export interface CurrentUser {
   personId: string;
   fullName: string;
   email: string;
-  roles: AppRole[];
+  roles: RoleGrant[];
 }
 
 /**
@@ -32,19 +37,40 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
   const { data: roleRows } = await supabase
     .from("person_roles")
-    .select("role")
+    .select("role, organization_id")
     .eq("person_id", person.id);
 
   return {
     personId: person.id,
     fullName: person.full_name,
     email: person.email,
-    roles: (roleRows ?? []).map((r) => r.role),
+    roles: (roleRows ?? []).map((r) => ({
+      role: r.role,
+      organizationId: r.organization_id,
+    })),
   };
 }
 
+/**
+ * Global role check (ADMIN/EXECUTIVE only — these always have
+ * organization_id null, per the DB CHECK constraint). Do not use this for
+ * HEAD/MEMBER: those are org-scoped, so use `hasRoleInOrganization` instead
+ * — a HEAD of Organization A must not pass a check meant for Organization B.
+ */
 export function hasRole(user: CurrentUser | null, role: AppRole): boolean {
-  return user?.roles.includes(role) ?? false;
+  return user?.roles.some((r) => r.role === role) ?? false;
+}
+
+export function hasRoleInOrganization(
+  user: CurrentUser | null,
+  role: AppRole,
+  organizationId: string,
+): boolean {
+  return (
+    user?.roles.some(
+      (r) => r.role === role && r.organizationId === organizationId,
+    ) ?? false
+  );
 }
 
 /**

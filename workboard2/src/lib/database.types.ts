@@ -1,9 +1,10 @@
-// Hand-written to mirror supabase/migrations/0001_foundation.sql.
+// Hand-written to mirror supabase/migrations/0001_foundation.sql and
+// 0002_foundation_corrections.sql.
 // Once a live Supabase project exists, regenerate with:
 //   npx supabase gen types typescript --project-id <id> > src/lib/database.types.ts
 
 export type AppRole = "ADMIN" | "HEAD" | "MEMBER" | "EXECUTIVE";
-export type TeamKind = "WORKING" | "PROJECT";
+export type TeamType = "WORKING" | "PROJECT";
 
 export interface Database {
   public: {
@@ -12,12 +13,18 @@ export interface Database {
         Row: {
           id: string;
           name: string;
+          is_active: boolean;
+          archived_at: string | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
           name: string;
+          is_active?: boolean;
+          archived_at?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["networks"]["Insert"]>;
         Relationships: [];
@@ -27,13 +34,19 @@ export interface Database {
           id: string;
           network_id: string;
           name: string;
+          is_active: boolean;
+          archived_at: string | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
           network_id: string;
           name: string;
+          is_active?: boolean;
+          archived_at?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<
           Database["public"]["Tables"]["organizations"]["Insert"]
@@ -49,6 +62,7 @@ export interface Database {
           valid_from: string;
           valid_to: string | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -58,6 +72,7 @@ export interface Database {
           valid_from?: string;
           valid_to?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<
           Database["public"]["Tables"]["organization_units"]["Insert"]
@@ -72,6 +87,7 @@ export interface Database {
           valid_from: string;
           valid_to: string | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -80,6 +96,7 @@ export interface Database {
           valid_from?: string;
           valid_to?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["positions"]["Insert"]>;
         Relationships: [];
@@ -91,6 +108,7 @@ export interface Database {
           full_name: string;
           email: string;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -98,6 +116,7 @@ export interface Database {
           full_name: string;
           email: string;
           created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["people"]["Insert"]>;
         Relationships: [];
@@ -110,6 +129,7 @@ export interface Database {
           valid_from: string;
           valid_to: string | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -118,6 +138,7 @@ export interface Database {
           valid_from?: string;
           valid_to?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<
           Database["public"]["Tables"]["appointments"]["Insert"]
@@ -131,6 +152,7 @@ export interface Database {
           role: AppRole;
           organization_id: string | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -138,70 +160,59 @@ export interface Database {
           role: AppRole;
           organization_id?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<
           Database["public"]["Tables"]["person_roles"]["Insert"]
         >;
         Relationships: [];
       };
-      working_teams: {
+      teams: {
         Row: {
           id: string;
-          organization_id: string;
+          network_id: string;
+          owner_organization_id: string | null;
+          team_type: TeamType;
           name: string;
+          is_active: boolean;
+          archived_at: string | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
-          organization_id: string;
+          network_id: string;
+          owner_organization_id?: string | null;
+          team_type: TeamType;
           name: string;
+          is_active?: boolean;
+          archived_at?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
-        Update: Partial<
-          Database["public"]["Tables"]["working_teams"]["Insert"]
-        >;
-        Relationships: [];
-      };
-      project_teams: {
-        Row: {
-          id: string;
-          organization_id: string;
-          name: string;
-          created_at: string;
-        };
-        Insert: {
-          id?: string;
-          organization_id: string;
-          name: string;
-          created_at?: string;
-        };
-        Update: Partial<
-          Database["public"]["Tables"]["project_teams"]["Insert"]
-        >;
+        Update: Partial<Database["public"]["Tables"]["teams"]["Insert"]>;
         Relationships: [];
       };
       team_memberships: {
         Row: {
           id: string;
-          team_kind: TeamKind;
-          working_team_id: string | null;
-          project_team_id: string | null;
+          team_id: string;
           person_id: string;
           role_in_team: string | null;
           valid_from: string;
           valid_to: string | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
-          team_kind: TeamKind;
-          working_team_id?: string | null;
-          project_team_id?: string | null;
+          team_id: string;
           person_id: string;
           role_in_team?: string | null;
           valid_from?: string;
           valid_to?: string | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: Partial<
           Database["public"]["Tables"]["team_memberships"]["Insert"]
@@ -219,14 +230,22 @@ export interface Database {
         Args: { check_role: AppRole };
         Returns: boolean;
       };
+      has_role_in_organization: {
+        Args: { check_role: AppRole; org_id: string };
+        Returns: boolean;
+      };
       is_admin: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      is_executive: {
         Args: Record<string, never>;
         Returns: boolean;
       };
     };
     Enums: {
       app_role: AppRole;
-      team_kind: TeamKind;
+      team_type_enum: TeamType;
     };
   };
 }
