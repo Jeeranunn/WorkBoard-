@@ -149,10 +149,10 @@ create table tasks (
   is_urgent boolean not null default false,
   priority priority_level generated always as (
     case
-      when is_important and is_urgent then 'P1'
-      when is_important and not is_urgent then 'P2'
-      when not is_important and is_urgent then 'P3'
-      else 'P4'
+      when is_important and is_urgent then 'P1'::priority_level
+      when is_important and not is_urgent then 'P2'::priority_level
+      when not is_important and is_urgent then 'P3'::priority_level
+      else 'P4'::priority_level
     end
   ) stored,
 
