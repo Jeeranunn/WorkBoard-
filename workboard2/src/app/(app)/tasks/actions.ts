@@ -90,31 +90,59 @@ export async function completeTaskAction(formData: FormData) {
   await callTaskRpc(taskId, "complete_task", { p_task_id: taskId });
 }
 
-export async function startTaskTimerAction(formData: FormData) {
+// Timer actions are wired through useActionState (see
+// src/components/tasks/timer-action-form.tsx) instead of being passed
+// directly to <form action={...}>. A Server Action bound directly to a
+// form has no way to report a thrown error back to the page — Next.js
+// redacts a thrown error's message in production, and there is no
+// re-render to show it in anyway — so a rejected RPC call (task status
+// wrong, not clocked in, already has a timer running elsewhere, ...)
+// looked to the user like the button silently did nothing. Returning a
+// state object instead means the real ข้อความ from the RPC always reaches
+// the page.
+export interface TimerFormState {
+  error: string | null;
+}
+
+const initialTimerFormState: TimerFormState = { error: null };
+
+export async function startTaskTimerAction(
+  _prevState: TimerFormState,
+  formData: FormData,
+): Promise<TimerFormState> {
   const taskId = str(formData, "task_id");
   const supabase = await createClient();
   const { error } = await supabase.rpc("start_task_timer", { p_task_id: taskId });
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message };
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/my-work");
+  return initialTimerFormState;
 }
 
-export async function switchTaskTimerAction(formData: FormData) {
+export async function switchTaskTimerAction(
+  _prevState: TimerFormState,
+  formData: FormData,
+): Promise<TimerFormState> {
   const taskId = str(formData, "task_id");
   const supabase = await createClient();
   const { error } = await supabase.rpc("switch_task_timer", { p_task_id: taskId });
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message };
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/my-work");
+  return initialTimerFormState;
 }
 
-export async function pauseTaskTimerAction(formData: FormData) {
+export async function pauseTaskTimerAction(
+  _prevState: TimerFormState,
+  formData: FormData,
+): Promise<TimerFormState> {
   const taskId = optionalStr(formData, "task_id");
   const supabase = await createClient();
   const { error } = await supabase.rpc("pause_task_timer");
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message };
   if (taskId) revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/my-work");
+  return initialTimerFormState;
 }
 
 export async function addCommentAction(formData: FormData) {

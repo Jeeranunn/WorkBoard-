@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, hasRole } from "@/lib/auth";
@@ -8,6 +9,49 @@ import {
 } from "@/lib/project-labels";
 import { ACTIVE_TASK_STATUSES } from "@/lib/task-labels";
 import type { ProjectHealth } from "@/lib/database.types";
+
+// The one genuinely sequential query on this page — it needs topHolderIds,
+// computed from the tasks already fetched above — so it's the one part of
+// the dashboard worth streaming in behind the rest: the stat tiles,
+// attention lists, and network/org/project/task tree render and reach the
+// browser immediately instead of waiting on this last small lookup too.
+async function WorkloadPanel({
+  topHolderIds,
+  workloadCount,
+}: {
+  topHolderIds: string[];
+  workloadCount: Map<string, number>;
+}) {
+  const supabase = await createClient();
+  const { data: holderPeople } = topHolderIds.length
+    ? await supabase.from("people").select("id, full_name").in("id", topHolderIds)
+    : { data: [] as { id: string; full_name: string }[] };
+  const holderName = new Map((holderPeople ?? []).map((h) => [h.id, h.full_name]));
+
+  return (
+    <ul className="space-y-1 text-sm">
+      {topHolderIds.map((id) => (
+        <li key={id} className="flex justify-between">
+          <span>{holderName.get(id) ?? "-"}</span>
+          <span className="text-slate-400">{workloadCount.get(id)} งาน</span>
+        </li>
+      ))}
+      {topHolderIds.length === 0 && (
+        <li className="text-xs text-slate-400">ไม่มีข้อมูล</li>
+      )}
+    </ul>
+  );
+}
+
+function WorkloadPanelSkeleton() {
+  return (
+    <ul className="animate-pulse space-y-2">
+      {[0, 1, 2].map((i) => (
+        <li key={i} className="h-4 rounded bg-slate-100" />
+      ))}
+    </ul>
+  );
+}
 
 interface TaskSummary {
   id: string;
@@ -110,10 +154,6 @@ export default async function ExecutiveDashboardPage() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([id]) => id);
-  const { data: holderPeople } = topHolderIds.length
-    ? await supabase.from("people").select("id, full_name").in("id", topHolderIds)
-    : { data: [] as { id: string; full_name: string }[] };
-  const holderName = new Map((holderPeople ?? []).map((h) => [h.id, h.full_name]));
 
   const orgsByNetwork = new Map<string, typeof organizations>();
   for (const o of organizations ?? []) {
@@ -260,17 +300,9 @@ export default async function ExecutiveDashboardPage() {
 
         <section className="rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="mb-3 text-sm font-semibold">Workload (ผู้ถือครองงานมากที่สุด)</h2>
-          <ul className="space-y-1 text-sm">
-            {topHolderIds.map((id) => (
-              <li key={id} className="flex justify-between">
-                <span>{holderName.get(id) ?? "-"}</span>
-                <span className="text-slate-400">{workloadCount.get(id)} งาน</span>
-              </li>
-            ))}
-            {topHolderIds.length === 0 && (
-              <li className="text-xs text-slate-400">ไม่มีข้อมูล</li>
-            )}
-          </ul>
+          <Suspense fallback={<WorkloadPanelSkeleton />}>
+            <WorkloadPanel topHolderIds={topHolderIds} workloadCount={workloadCount} />
+          </Suspense>
         </section>
       </div>
     </div>

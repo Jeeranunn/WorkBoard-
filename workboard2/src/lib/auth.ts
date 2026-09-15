@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import { timed } from "@/lib/server-timing";
 import type { AppRole } from "@/lib/database.types";
 
 export interface RoleGrant {
@@ -23,11 +24,13 @@ export interface CurrentUser {
  * RSC render tree), so this never leaks a session across users/requests.
  */
 export const getAuthUser = cache(async () => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
+  return timed("auth.getUser (RSC)", async () => {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return user;
+  });
 });
 
 /**
@@ -47,18 +50,19 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   const supabase = await createClient();
 
-  const { data: person } = await supabase
-    .from("people")
-    .select("id, full_name, email")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
+  const { data: person } = await timed("people lookup (query)", () =>
+    supabase
+      .from("people")
+      .select("id, full_name, email")
+      .eq("auth_user_id", user.id)
+      .maybeSingle(),
+  );
 
   if (!person) return null;
 
-  const { data: roleRows } = await supabase
-    .from("person_roles")
-    .select("role, organization_id")
-    .eq("person_id", person.id);
+  const { data: roleRows } = await timed("person_roles lookup (query)", () =>
+    supabase.from("person_roles").select("role, organization_id").eq("person_id", person.id),
+  );
 
   return {
     personId: person.id,

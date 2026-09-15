@@ -7,6 +7,10 @@ supabase start          # local Supabase stack (needs Docker)
 supabase db reset       # applies supabase/migrations/*.sql in order, then supabase/seed.sql
 psql "$(supabase status -o json | jq -r '.DB_URL')" \
   -v ON_ERROR_STOP=1 -f supabase/tests/workflow_and_rls.sql
+psql "$(supabase status -o json | jq -r '.DB_URL')" \
+  -v ON_ERROR_STOP=1 -f supabase/tests/weekly_planner_rls.sql
+psql "$(supabase status -o json | jq -r '.DB_URL')" \
+  -v ON_ERROR_STOP=1 -f supabase/tests/timer_flow.sql
 ```
 
 `workflow_and_rls.sql` must print `ALL CHECKS PASSED` at the end. It covers:
@@ -24,6 +28,17 @@ psql "$(supabase status -o json | jq -r '.DB_URL')" \
   a time, switch/pause/clock-out behave correctly.
 - Milestone 5.1 fix: HEAD-B cannot see or correct an Org A member's time
   data; HEAD-A (same org) can; EXECUTIVE cannot correct anything.
+
+`timer_flow.sql` must print `ALL TIMER FLOW CHECKS PASSED`. Written after a
+production report that the timer button silently did nothing. It covers:
+
+- Every start_task_timer()/switch_task_timer() precondition on its own:
+  rejected before Clock In, rejected while on break, rejected for an
+  uninvolved person (before their own attendance is even checked).
+- The full reported flow: start → running → pause → start again → switch.
+- Permission matrix: the assignee, an org-HEAD (not the assignee), and
+  ADMIN can all use the timer — each on their own attendance, not the
+  task's assignee's.
 
 If the run breaks a step, it stops there with `ASSERTION_FAILURE: ...` (a
 real regression) or a plain Postgres error (something else broke).

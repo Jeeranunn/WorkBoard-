@@ -15,4 +15,26 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-thai), sans-serif;
+  /* Thai text needs more vertical breathing room than Latin body copy —
+     vowel/tone marks stack above and below the base consonant, and a
+     1.5-1.6 line-height (fine for Latin) reads as visually cramped. */
+  line-height: 1.7;
+}
+
+/* Base heading rhythm — only line-height/letter-spacing/weight, never
+   font-size: every heading in this app sets its own size utility
+   (text-xl/text-sm/...) independent of its semantic <h1>-<h4> level, so a
+   base font-size here would fight those. Tailwind utility classes already
+   used on a given heading (font-semibold, etc.) still win over this, since
+   utilities sit in a later cascade layer than base — this only supplies a
+   sane default where a heading doesn't set its own weight. */
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-weight: 600;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+  }
 }

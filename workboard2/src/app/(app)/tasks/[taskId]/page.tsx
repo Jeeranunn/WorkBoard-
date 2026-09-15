@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, hasRole, hasRoleInOrganization } from "@/lib/auth";
 import { TASK_STATUS_LABELS, WORK_ORIGIN_LABELS } from "@/lib/task-labels";
 import type { PriorityLevel } from "@/lib/database.types";
+import { TimerActionForm } from "@/components/tasks/timer-action-form";
 import {
   acknowledgeTaskAction,
   startTaskAction,
@@ -463,29 +464,36 @@ export default async function TaskDetailPage(
                   <span className="text-emerald-600">
                     กำลังจับเวลาอยู่ (เริ่มเมื่อ {formatDateTime(myActiveTimer.started_at)})
                   </span>
-                  <form action={pauseTaskTimerAction}>
-                    <input type="hidden" name="task_id" value={task.id} />
-                    <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
-                      หยุดชั่วคราว
-                    </button>
-                  </form>
+                  <TimerActionForm
+                    action={pauseTaskTimerAction}
+                    taskId={task.id}
+                    buttonLabel="หยุดชั่วคราว"
+                    pendingLabel="กำลังหยุด..."
+                    buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                  />
                 </div>
               ) : myActiveTimer ? (
-                <form action={switchTaskTimerAction} className="flex items-center justify-between text-sm">
+                <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-500">กำลังจับเวลางานอื่นอยู่</span>
-                  <input type="hidden" name="task_id" value={task.id} />
-                  <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
-                    สลับมาจับเวลางานนี้
-                  </button>
-                </form>
+                  <TimerActionForm
+                    action={switchTaskTimerAction}
+                    taskId={task.id}
+                    buttonLabel="สลับมาจับเวลางานนี้"
+                    pendingLabel="กำลังสลับ..."
+                    buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+                  />
+                </div>
               ) : (
-                <form action={startTaskTimerAction} className="flex items-center justify-between text-sm">
+                <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-400">ยังไม่ได้เริ่มจับเวลา</span>
-                  <input type="hidden" name="task_id" value={task.id} />
-                  <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
-                    เริ่มจับเวลางานนี้
-                  </button>
-                </form>
+                  <TimerActionForm
+                    action={startTaskTimerAction}
+                    taskId={task.id}
+                    buttonLabel="เริ่มจับเวลางานนี้"
+                    pendingLabel="กำลังเริ่ม..."
+                    buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+                  />
+                </div>
               )}
             </section>
           )}

@@ -14,6 +14,7 @@ import {
   clockOutAction,
 } from "./actions";
 import { pauseTaskTimerAction } from "../tasks/actions";
+import { TimerActionForm } from "@/components/tasks/timer-action-form";
 
 function formatTime(value: string): string {
   return new Date(value).toLocaleString("th-TH", {
@@ -227,12 +228,13 @@ export default async function MyWorkPage() {
             </Link>{" "}
             (เริ่มเมื่อ {formatTime(activeTimer.started_at)})
           </span>
-          <form action={pauseTaskTimerAction}>
-            <input type="hidden" name="task_id" value={activeTimerTask.id} />
-            <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
-              หยุดชั่วคราว
-            </button>
-          </form>
+          <TimerActionForm
+            action={pauseTaskTimerAction}
+            taskId={activeTimerTask.id}
+            buttonLabel="หยุดชั่วคราว"
+            pendingLabel="กำลังหยุด..."
+            buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+          />
         </section>
       )}
 
