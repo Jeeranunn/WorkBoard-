@@ -1,5 +1,6 @@
 // Hand-written to mirror supabase/migrations/0001_foundation.sql,
-// 0002_foundation_corrections.sql, and 0003_work_core.sql.
+// 0002_foundation_corrections.sql, 0003_work_core.sql,
+// 0004_work_core_adjustments.sql, and 0005_execution_workflow.sql.
 // Once a live Supabase project exists, regenerate with:
 //   npx supabase gen types typescript --project-id <id> > src/lib/database.types.ts
 
@@ -352,7 +353,8 @@ export interface Database {
           assignee_person_id: string;
           reviewer_person_id: string | null;
           approver_person_id: string | null;
-          current_holder_person_id: string;
+          // Null at APPROVED/COMPLETED/CANCELLED — there is no next action.
+          current_holder_person_id: string | null;
           deadline: string | null;
           estimated_hours: number | null;
           is_important: boolean;
@@ -384,9 +386,8 @@ export interface Database {
           reviewer_person_id?: string | null;
           approver_person_id?: string | null;
           // Ignored in practice — compute_task_current_holder() overwrites
-          // this on every insert/update. Still required at the type level
-          // because the column is NOT NULL with no database default.
-          current_holder_person_id?: string;
+          // this on every insert/update.
+          current_holder_person_id?: string | null;
           deadline?: string | null;
           estimated_hours?: number | null;
           is_important?: boolean;
@@ -483,6 +484,58 @@ export interface Database {
         >;
         Relationships: [];
       };
+      task_submissions: {
+        Row: {
+          id: string;
+          task_id: string;
+          version: number;
+          message: string | null;
+          link: string | null;
+          file_path: string | null;
+          submitted_by_person_id: string;
+          submitted_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          version: number;
+          message?: string | null;
+          link?: string | null;
+          file_path?: string | null;
+          submitted_by_person_id: string;
+          submitted_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["task_submissions"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      task_comments: {
+        Row: {
+          id: string;
+          task_id: string;
+          author_person_id: string;
+          body: string;
+          is_question: boolean;
+          mentioned_person_ids: string[];
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          task_id: string;
+          author_person_id: string;
+          body: string;
+          is_question?: boolean;
+          mentioned_person_ids?: string[];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["task_comments"]["Insert"]
+        >;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -525,6 +578,46 @@ export interface Database {
       is_task_overdue: {
         Args: { check_task_id: string };
         Returns: boolean;
+      };
+      is_task_assignee_side_actor: {
+        Args: { check_task_id: string };
+        Returns: boolean;
+      };
+      is_task_holder_side_actor: {
+        Args: { check_task_id: string };
+        Returns: boolean;
+      };
+      acknowledge_task: {
+        Args: { p_task_id: string };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      start_task: {
+        Args: { p_task_id: string };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      submit_task: {
+        Args: { p_task_id: string; p_message?: string | null; p_link?: string | null };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      begin_review: {
+        Args: { p_task_id: string };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      request_revision: {
+        Args: { p_task_id: string; p_note?: string | null };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      resubmit_task: {
+        Args: { p_task_id: string; p_message?: string | null; p_link?: string | null };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      approve_task: {
+        Args: { p_task_id: string };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      complete_task: {
+        Args: { p_task_id: string };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
       };
     };
     Enums: {
