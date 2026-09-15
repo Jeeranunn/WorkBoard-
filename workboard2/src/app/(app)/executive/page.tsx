@@ -74,7 +74,7 @@ export default async function ExecutiveDashboardPage() {
     supabase
       .from("tasks")
       .select(
-        "id, title, project_id, status, deadline, is_blocked, current_holder_person_id",
+        "id, title, project_id, status, priority, deadline, is_blocked, current_holder_person_id",
       ),
   ]);
 
@@ -126,6 +126,12 @@ export default async function ExecutiveDashboardPage() {
     const list = projectsByOrg.get(p.organization_id) ?? [];
     list.push(p);
     projectsByOrg.set(p.organization_id, list);
+  }
+  const tasksByProject = new Map<string, NonNullable<typeof tasks>>();
+  for (const t of tasks ?? []) {
+    const list = tasksByProject.get(t.project_id) ?? [];
+    list.push(t);
+    tasksByProject.set(t.project_id, list);
   }
 
   return (
@@ -184,38 +190,70 @@ export default async function ExecutiveDashboardPage() {
 
       <div className="grid gap-6 md:grid-cols-3">
         <section className="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
-          <h2 className="mb-3 text-sm font-semibold">โครงสร้างองค์กร → โครงการ</h2>
-          <div className="space-y-4">
+          <h2 className="mb-3 text-sm font-semibold">
+            เครือข่าย → องค์กร → โครงการ → งาน
+          </h2>
+          <p className="mb-3 text-xs text-slate-400">
+            กดเพื่อขยาย/ย่อแต่ละระดับ
+          </p>
+          <div className="space-y-2">
             {(networks ?? []).map((n) => (
-              <div key={n.id}>
-                <div className="text-sm font-medium">{n.name}</div>
+              <details key={n.id} open className="group">
+                <summary className="cursor-pointer text-sm font-medium">
+                  {n.name}
+                </summary>
                 <div className="ml-4 mt-1 space-y-2">
                   {(orgsByNetwork.get(n.id) ?? []).map((o) => (
-                    <div key={o.id}>
-                      <div className="text-xs font-medium text-slate-500">
+                    <details key={o.id}>
+                      <summary className="cursor-pointer text-xs font-medium text-slate-500">
                         {o.name}
-                      </div>
-                      <ul className="ml-4 space-y-0.5">
+                      </summary>
+                      <ul className="ml-4 mt-1 space-y-1">
                         {(projectsByOrg.get(o.id) ?? []).map((p) => (
-                          <li key={p.id} className="flex items-center gap-2 text-sm">
-                            <Link href={`/projects/${p.id}`} className="hover:underline">
-                              {p.name}
-                            </Link>
-                            <span
-                              className={`rounded px-1 text-xs ${PROJECT_HEALTH_STYLES[p.health]}`}
-                            >
-                              {PROJECT_HEALTH_LABELS[p.health]}
-                            </span>
+                          <li key={p.id} className="text-sm">
+                            <details>
+                              <summary className="cursor-pointer">
+                                <Link
+                                  href={`/projects/${p.id}`}
+                                  className="hover:underline"
+                                >
+                                  {p.name}
+                                </Link>
+                                <span
+                                  className={`ml-2 rounded px-1 text-xs ${PROJECT_HEALTH_STYLES[p.health]}`}
+                                >
+                                  {PROJECT_HEALTH_LABELS[p.health]}
+                                </span>
+                              </summary>
+                              <ul className="ml-5 mt-1 space-y-0.5 text-xs">
+                                {(tasksByProject.get(p.id) ?? []).map((t) => (
+                                  <li key={t.id} className="flex justify-between gap-2">
+                                    <Link
+                                      href={`/tasks/${t.id}`}
+                                      className="truncate hover:underline"
+                                    >
+                                      {t.title}
+                                    </Link>
+                                    <span className="shrink-0 text-slate-400">
+                                      {t.priority} · {t.status}
+                                    </span>
+                                  </li>
+                                ))}
+                                {(tasksByProject.get(p.id) ?? []).length === 0 && (
+                                  <li className="text-slate-400">ยังไม่มีงาน</li>
+                                )}
+                              </ul>
+                            </details>
                           </li>
                         ))}
                         {(projectsByOrg.get(o.id) ?? []).length === 0 && (
                           <li className="text-xs text-slate-400">ยังไม่มีโครงการ</li>
                         )}
                       </ul>
-                    </div>
+                    </details>
                   ))}
                 </div>
-              </div>
+              </details>
             ))}
           </div>
         </section>
