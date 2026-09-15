@@ -1,6 +1,5 @@
-// Hand-written to mirror supabase/migrations/0001_foundation.sql,
-// 0002_foundation_corrections.sql, 0003_work_core.sql,
-// 0004_work_core_adjustments.sql, and 0005_execution_workflow.sql.
+// Hand-written to mirror supabase/migrations/0001_foundation.sql through
+// 0009_time_scope_correction.sql.
 // Once a live Supabase project exists, regenerate with:
 //   npx supabase gen types typescript --project-id <id> > src/lib/database.types.ts
 
@@ -872,6 +871,18 @@ export interface Database {
           p_reason?: string | null;
         };
         Returns: Database["public"]["Tables"]["task_time_entries"]["Row"];
+      };
+      person_organization_ids: {
+        Args: { check_person_id: string };
+        Returns: string[];
+      };
+      is_head_over_person: {
+        Args: { check_person_id: string };
+        Returns: boolean;
+      };
+      time_correction_target_person: {
+        Args: { p_target_table: string; p_target_id: string };
+        Returns: string;
       };
     };
     Enums: {
