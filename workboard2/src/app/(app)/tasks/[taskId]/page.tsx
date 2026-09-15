@@ -58,11 +58,24 @@ export default async function TaskDetailPage(
 
   const supabase = await createClient();
 
-  const { data: task } = await supabase
-    .from("tasks")
-    .select("*")
-    .eq("id", taskId)
-    .maybeSingle();
+  // myActiveTimer doesn't depend on `task` at all (it's just "does this
+  // person have any timer running anywhere"), so it's fetched alongside the
+  // task instead of after everything else — one fewer sequential round trip.
+  const [{ data: task }, { data: myActiveTimer }] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select(
+        "id, project_id, workstream_id, milestone_id, title, description, deliverable, completion_criteria, source, work_origin, status, assignee_person_id, reviewer_person_id, approver_person_id, current_holder_person_id, deadline, priority, is_blocked, blocked_reason, is_waiting, waiting_reason, is_on_hold, on_hold_reason",
+      )
+      .eq("id", taskId)
+      .maybeSingle(),
+    supabase
+      .from("task_time_entries")
+      .select("id, task_id, started_at")
+      .eq("person_id", user.personId)
+      .is("ended_at", null)
+      .maybeSingle(),
+  ]);
 
   if (!task) notFound();
 
@@ -173,13 +186,6 @@ export default async function TaskDetailPage(
     hasRole(user, "ADMIN") ||
     task.current_holder_person_id === user.personId ||
     hasRoleInOrganization(user, "HEAD", project.organization_id);
-
-  const { data: myActiveTimer } = await supabase
-    .from("task_time_entries")
-    .select("id, task_id, started_at")
-    .eq("person_id", user.personId)
-    .is("ended_at", null)
-    .maybeSingle();
 
   interface ActivityItem {
     at: string;

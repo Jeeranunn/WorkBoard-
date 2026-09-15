@@ -46,79 +46,53 @@ export default async function MyWorkPage() {
   const involvedFilter = `assignee_person_id.eq.${personId},reviewer_person_id.eq.${personId},approver_person_id.eq.${personId}`;
 
   const now = new Date();
+  const nowIso = now.toISOString();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-  const weekAhead = new Date(todayStart.getTime() + 8 * 24 * 60 * 60 * 1000);
+  const tomorrowStartIso = tomorrowStart.toISOString();
+  const weekAheadIso = new Date(todayStart.getTime() + 8 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [
-    { data: overdue },
-    { data: waitingForMe },
-    { data: dueToday },
-    { data: p1 },
-    { data: inProgress },
-    { data: upcoming },
-    { data: waitingForOthers },
-  ] = await Promise.all([
-    supabase
-      .from("tasks")
-      .select(TASK_COLUMNS)
-      .or(involvedFilter)
-      .in("status", ACTIVE_TASK_STATUSES)
-      .lt("deadline", now.toISOString())
-      .order("deadline", { ascending: true }),
-    supabase
-      .from("tasks")
-      .select(TASK_COLUMNS)
-      .eq("current_holder_person_id", personId)
-      .in("status", ACTIVE_TASK_STATUSES)
-      .order("deadline", { ascending: true, nullsFirst: false }),
-    supabase
-      .from("tasks")
-      .select(TASK_COLUMNS)
-      .or(involvedFilter)
-      .in("status", ACTIVE_TASK_STATUSES)
-      .gte("deadline", now.toISOString())
-      .lt("deadline", tomorrowStart.toISOString())
-      .order("deadline", { ascending: true }),
-    supabase
-      .from("tasks")
-      .select(TASK_COLUMNS)
-      .or(involvedFilter)
-      .in("status", ACTIVE_TASK_STATUSES)
-      .eq("priority", "P1")
-      .order("deadline", { ascending: true, nullsFirst: false }),
-    supabase
-      .from("tasks")
-      .select(TASK_COLUMNS)
-      .or(involvedFilter)
-      .eq("status", "IN_PROGRESS")
-      .order("deadline", { ascending: true, nullsFirst: false }),
-    supabase
-      .from("tasks")
-      .select(TASK_COLUMNS)
-      .or(involvedFilter)
-      .in("status", ACTIVE_TASK_STATUSES)
-      .gte("deadline", tomorrowStart.toISOString())
-      .lt("deadline", weekAhead.toISOString())
-      .order("deadline", { ascending: true }),
-    supabase
-      .from("tasks")
-      .select(TASK_COLUMNS)
-      .or(involvedFilter)
-      .in("status", ACTIVE_TASK_STATUSES)
-      .neq("current_holder_person_id", personId)
-      .order("deadline", { ascending: true, nullsFirst: false }),
-  ]);
+  // The 7 buckets below (overdue/waitingForMe/dueToday/p1/inProgress/upcoming/
+  // waitingForOthers) used to be 7 separate queries, but every one of them is
+  // a subset of "tasks I'm involved in, still active" — current_holder is
+  // always one of assignee/reviewer/approver (see compute_task_current_holder
+  // in 0006), and IN_PROGRESS is already inside ACTIVE_TASK_STATUSES — so a
+  // single fetch plus in-memory bucketing produces identical results in one
+  // round trip instead of seven. A task can still appear in multiple
+  // sections at once (e.g. an overdue P1 task), matching the prior behavior.
+  const { data: involvedTasks } = await supabase
+    .from("tasks")
+    .select(TASK_COLUMNS)
+    .or(involvedFilter)
+    .in("status", ACTIVE_TASK_STATUSES);
 
-  const allTasks: RawTask[] = [
-    ...(overdue ?? []),
-    ...(waitingForMe ?? []),
-    ...(dueToday ?? []),
-    ...(p1 ?? []),
-    ...(inProgress ?? []),
-    ...(upcoming ?? []),
-    ...(waitingForOthers ?? []),
-  ];
+  const allTasks: RawTask[] = involvedTasks ?? [];
+
+  const byDeadlineAsc = (a: RawTask, b: RawTask) => {
+    const aTime = a.deadline ? new Date(a.deadline).getTime() : Infinity;
+    const bTime = b.deadline ? new Date(b.deadline).getTime() : Infinity;
+    return aTime - bTime;
+  };
+
+  const overdue = allTasks
+    .filter((t) => t.deadline && t.deadline < nowIso)
+    .sort(byDeadlineAsc);
+  const waitingForMe = allTasks
+    .filter((t) => t.current_holder_person_id === personId)
+    .sort(byDeadlineAsc);
+  const dueToday = allTasks
+    .filter((t) => t.deadline && t.deadline >= nowIso && t.deadline < tomorrowStartIso)
+    .sort(byDeadlineAsc);
+  const p1 = allTasks.filter((t) => t.priority === "P1").sort(byDeadlineAsc);
+  const inProgress = allTasks.filter((t) => t.status === "IN_PROGRESS").sort(byDeadlineAsc);
+  const upcoming = allTasks
+    .filter((t) => t.deadline && t.deadline >= tomorrowStartIso && t.deadline < weekAheadIso)
+    .sort(byDeadlineAsc);
+  const waitingForOthers = allTasks
+    .filter(
+      (t) => t.current_holder_person_id !== null && t.current_holder_person_id !== personId,
+    )
+    .sort(byDeadlineAsc);
 
   const projectIds = [...new Set(allTasks.map((t) => t.project_id))];
   const holderIds = [
@@ -143,32 +117,38 @@ export default async function MyWorkPage() {
     (holders ?? []).map((h) => [h.id, h.full_name]),
   );
 
-  const { data: attendanceSession } = await supabase
-    .from("attendance_sessions")
-    .select("id, clock_in_at")
-    .eq("person_id", personId)
-    .is("clock_out_at", null)
-    .maybeSingle();
+  // Attendance (session -> break) and task timer (timer -> its task) are two
+  // independent chains — each step only depends on its own prior step, not
+  // on the other chain — so each round only waits on the slower of the two,
+  // instead of all four running one after another.
+  const [{ data: attendanceSession }, { data: activeTimer }] = await Promise.all([
+    supabase
+      .from("attendance_sessions")
+      .select("id, clock_in_at")
+      .eq("person_id", personId)
+      .is("clock_out_at", null)
+      .maybeSingle(),
+    supabase
+      .from("task_time_entries")
+      .select("id, task_id, started_at")
+      .eq("person_id", personId)
+      .is("ended_at", null)
+      .maybeSingle(),
+  ]);
 
-  const { data: activeBreak } = attendanceSession
-    ? await supabase
-        .from("attendance_breaks")
-        .select("id, break_start_at")
-        .eq("attendance_session_id", attendanceSession.id)
-        .is("break_end_at", null)
-        .maybeSingle()
-    : { data: null };
-
-  const { data: activeTimer } = await supabase
-    .from("task_time_entries")
-    .select("id, task_id, started_at")
-    .eq("person_id", personId)
-    .is("ended_at", null)
-    .maybeSingle();
-
-  const { data: activeTimerTask } = activeTimer
-    ? await supabase.from("tasks").select("id, title").eq("id", activeTimer.task_id).maybeSingle()
-    : { data: null };
+  const [{ data: activeBreak }, { data: activeTimerTask }] = await Promise.all([
+    attendanceSession
+      ? supabase
+          .from("attendance_breaks")
+          .select("id, break_start_at")
+          .eq("attendance_session_id", attendanceSession.id)
+          .is("break_end_at", null)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    activeTimer
+      ? supabase.from("tasks").select("id, title").eq("id", activeTimer.task_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   function toRows(tasks: RawTask[] | null): TaskListRow[] {
     return (tasks ?? []).map((t) => ({

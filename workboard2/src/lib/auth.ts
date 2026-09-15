@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/database.types";
 
@@ -15,17 +16,36 @@ export interface CurrentUser {
 }
 
 /**
- * Resolves the signed-in Supabase auth user to a `people` row and their
- * granted roles. Returns null when there is no session or no matching
- * person row yet (e.g. an auth user created before an admin linked them).
+ * The raw Supabase auth session check, shared by getCurrentUser() below and
+ * by (app)/layout.tsx directly. Wrapped in React's cache() so it only hits
+ * Supabase Auth once per request no matter how many Server Components call
+ * it — cache() is request-scoped (a fresh cache per incoming request in the
+ * RSC render tree), so this never leaks a session across users/requests.
  */
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+export const getAuthUser = cache(async () => {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  return user;
+});
 
+/**
+ * Resolves the signed-in Supabase auth user to a `people` row and their
+ * granted roles. Returns null when there is no session or no matching
+ * person row yet (e.g. an auth user created before an admin linked them).
+ *
+ * Wrapped in cache() for the same reason as getAuthUser(): every route's
+ * page.tsx (plus the shared layout) calls this once each, so without
+ * memoization a single request re-ran the auth check, the `people` lookup,
+ * and the `person_roles` lookup once per segment. cache() collapses all of
+ * that to one round trip per query, per request.
+ */
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
+  const user = await getAuthUser();
   if (!user) return null;
+
+  const supabase = await createClient();
 
   const { data: person } = await supabase
     .from("people")
@@ -49,7 +69,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
       organizationId: r.organization_id,
     })),
   };
-}
+});
 
 /**
  * Global role check (ADMIN/EXECUTIVE only — these always have

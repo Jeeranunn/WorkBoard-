@@ -23,12 +23,20 @@ export default async function ProjectDetailPage(
 
   const { data: project } = await supabase
     .from("projects")
-    .select("*")
+    .select("id, name, organization_id, status, health, target_date, description")
     .eq("id", projectId)
     .maybeSingle();
 
   if (!project) notFound();
 
+  const canManage =
+    hasRole(user, "ADMIN") ||
+    hasRoleInOrganization(user, "HEAD", project.organization_id);
+
+  // playbooks (the template list) only feeds the "ใช้ Playbook" panel, which
+  // is only rendered for canManage — skip fetching it for everyone else.
+  // playbook_tasks/playbook_conditional_rules are still always needed: they
+  // feed checkProjectCompleteness(), shown to every viewer.
   const [
     { data: organization },
     { data: workstreams },
@@ -53,7 +61,9 @@ export default async function ProjectDetailPage(
         "id, title, workstream_id, status, deadline, reviewer_person_id, current_holder_person_id, source_playbook_task_id",
       )
       .eq("project_id", projectId),
-    supabase.from("playbooks").select("id, key, name"),
+    canManage
+      ? supabase.from("playbooks").select("id, key, name")
+      : Promise.resolve({ data: [] as { id: string; key: string; name: string }[] }),
     supabase.from("playbook_tasks").select("id, tag"),
     supabase.from("playbook_conditional_rules").select("if_tag, then_tag, message"),
   ]);
@@ -83,10 +93,6 @@ export default async function ProjectDetailPage(
     taskTagById,
     conditionalRules: conditionalRules ?? [],
   });
-
-  const canManage =
-    hasRole(user, "ADMIN") ||
-    hasRoleInOrganization(user, "HEAD", project.organization_id);
 
   const tasksByWorkstream = new Map<string | null, NonNullable<typeof tasks>>();
   for (const t of tasks ?? []) {
