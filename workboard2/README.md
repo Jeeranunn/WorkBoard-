@@ -1,0 +1,65 @@
+# WorkBoard 2.0
+
+ระบบใหม่ของ WorkBoard สร้างด้วย Next.js App Router + TypeScript + Supabase
+แยกต่างหากจากระบบเดิม (`index.html` / `script.js` / `style.css` ที่ root ของ repo)
+ระบบเดิมยังใช้งานได้ตามปกติและไม่ถูกแก้ไขจากการพัฒนา WorkBoard 2.0
+
+## สถานะ: Milestone 1 — Foundation
+
+สิ่งที่ทำแล้ว:
+- Scaffold Next.js App Router + TypeScript + Tailwind
+- Supabase Auth (email/password) ผ่าน `@supabase/ssr`, session อยู่ใน cookie,
+  ตรวจสิทธิ์ผ่าน `proxy.ts` (เดิมชื่อ middleware ใน Next.js < 16)
+- Database schema เริ่มต้น (`supabase/migrations/0001_foundation.sql`):
+  Network / Organization / Organization Unit / Position / Person / Appointment,
+  Working Team / Project Team / Team Membership, Person Role — ทุกตารางมี
+  Row Level Security เปิดใช้งาน และมี `is_admin()` เป็น security definer function
+  แทนการเช็ค role ฝั่ง client
+- App shell ภาษาไทย (Sidebar/Topbar) พร้อมหน้า:
+  - `/login` เข้าสู่ระบบ
+  - `/overview` หน้าภาพรวม (placeholder)
+  - `/my-work` งานของฉัน (placeholder, milestone 3)
+  - `/admin/organizations`, `/admin/units`, `/admin/positions`, `/admin/teams`,
+    `/admin/members` — จัดการโครงสร้างองค์กร/ทีม/บทบาทเบื้องต้น (admin only,
+    บังคับด้วย RLS ไม่ใช่แค่ UI)
+
+ยังไม่ทำ (milestone ถัดไป): Project/Task/Workflow, My Work จริง,
+Executive Dashboard, Playbook, Time tracking
+
+## การรัน
+
+### ติดตั้ง
+
+```bash
+cd workboard2
+npm install
+```
+
+### ตั้งค่า Supabase
+
+1. สร้างโปรเจกต์ Supabase ใหม่
+2. รัน migration: `supabase/migrations/0001_foundation.sql` ผ่าน Supabase SQL editor
+   หรือ Supabase CLI (`supabase db push`)
+3. คัดลอก `.env.local.example` เป็น `.env.local` แล้วใส่ค่า
+   `NEXT_PUBLIC_SUPABASE_URL` และ `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+4. สร้างผู้ใช้แรกใน Supabase Auth (อีเมล/รหัสผ่าน) แล้ว insert แถวใน `people`
+   ที่มี `email` ตรงกันและ `auth_user_id` เท่ากับ id ของผู้ใช้นั้น
+   จากนั้น insert แถวใน `person_roles` role = `ADMIN` เพื่อเข้าใช้หน้า admin
+
+### พัฒนา
+
+```bash
+npm run dev
+```
+
+### Build
+
+```bash
+npm run build
+```
+
+## ความสัมพันธ์กับระบบเดิม
+
+โฟลเดอร์นี้ไม่แตะไฟล์ที่ root ของ repo เลย ระบบเดิมยัง deploy/ใช้งานแยกกันได้
+ระหว่างที่ WorkBoard 2.0 ถูกพัฒนาอยู่ที่นี่ การย้ายข้อมูลจาก Firestore ไป
+Supabase จะวางแผนแยกต่างหากในภายหลัง ไม่ทำ migration ที่ทำลายข้อมูลเดิม
