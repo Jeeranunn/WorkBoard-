@@ -13,11 +13,16 @@ const mainNav: NavItem[] = [
   { href: "/my-work", label: "งานของฉัน" },
 ];
 
+const workNav: NavItem[] = [
+  { href: "/projects", label: "โครงการ" },
+  { href: "/teams", label: "ทีม" },
+];
+
 const adminNav: NavItem[] = [
   { href: "/admin/organizations", label: "โครงสร้างองค์กร" },
   { href: "/admin/units", label: "หน่วยงาน" },
   { href: "/admin/positions", label: "ตำแหน่ง" },
-  { href: "/admin/teams", label: "ทีม" },
+  { href: "/admin/teams", label: "จัดการทีม" },
   { href: "/admin/members", label: "สมาชิกและบทบาท" },
 ];
 
@@ -39,7 +44,13 @@ function NavLink({ href, label }: NavItem) {
   );
 }
 
-export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
+export function Sidebar({
+  isAdmin,
+  isExecutive,
+}: {
+  isAdmin: boolean;
+  isExecutive: boolean;
+}) {
   return (
     <nav className="flex h-full w-60 flex-col gap-6 border-r border-slate-200 bg-white p-4">
       <div className="px-2 text-lg font-semibold">WorkBoard</div>
@@ -48,6 +59,15 @@ export function Sidebar({ isAdmin }: { isAdmin: boolean }) {
         {mainNav.map((item) => (
           <NavLink key={item.href} {...item} />
         ))}
+      </div>
+
+      <div className="space-y-1">
+        {workNav.map((item) => (
+          <NavLink key={item.href} {...item} />
+        ))}
+        {(isAdmin || isExecutive) && (
+          <NavLink href="/executive" label="ภาพรวมผู้บริหาร" />
+        )}
       </div>
 
       {isAdmin && (
