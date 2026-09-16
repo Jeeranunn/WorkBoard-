@@ -10,6 +10,7 @@ import {
 import { TASK_STATUS_LABELS } from "@/lib/task-labels";
 import { checkProjectCompleteness } from "@/lib/project-completeness";
 import { applyPlaybookAction } from "../actions";
+import { ManualTaskForm } from "./manual-task-form";
 
 export default async function ProjectDetailPage(
   props: PageProps<"/projects/[projectId]">,
@@ -32,6 +33,13 @@ export default async function ProjectDetailPage(
   const canManage =
     hasRole(user, "ADMIN") ||
     hasRoleInOrganization(user, "HEAD", project.organization_id);
+  const canAddManualTask =
+    canManage ||
+    user.roles.some(
+      (grant) =>
+        grant.role === "MEMBER" &&
+        grant.organizationId === project.organization_id,
+    );
 
   // playbooks (the template list) only feeds the "ใช้ Playbook" panel, which
   // is only rendered for canManage — skip fetching it for everyone else.
@@ -44,6 +52,7 @@ export default async function ProjectDetailPage(
     { data: playbooks },
     { data: playbookTasks },
     { data: conditionalRules },
+    { data: organizationRoles },
   ] = await Promise.all([
     supabase
       .from("organizations")
@@ -66,7 +75,26 @@ export default async function ProjectDetailPage(
       : Promise.resolve({ data: [] as { id: string; key: string; name: string }[] }),
     supabase.from("playbook_tasks").select("id, tag"),
     supabase.from("playbook_conditional_rules").select("if_tag, then_tag, message"),
+    canManage
+      ? supabase
+          .from("person_roles")
+          .select("person_id")
+          .eq("organization_id", project.organization_id)
+          .in("role", ["HEAD", "MEMBER"])
+      : Promise.resolve({ data: [] as { person_id: string }[] }),
   ]);
+
+  const managerPersonIds = [
+    ...new Set((organizationRoles ?? []).map((row) => row.person_id)),
+  ];
+  const { data: managerPeople } =
+    canManage && managerPersonIds.length
+      ? await supabase
+          .from("people")
+          .select("id, full_name")
+          .in("id", managerPersonIds)
+          .order("full_name")
+      : { data: [] as { id: string; full_name: string }[] };
 
   const holderIds = [
     ...new Set(
@@ -124,6 +152,29 @@ export default async function ProjectDetailPage(
 
       <div className="grid gap-6 md:grid-cols-3">
         <div className="space-y-6 md:col-span-2">
+          {canAddManualTask && (
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="mb-3">
+                <h2 className="text-sm font-semibold">เพิ่มงานเอง</h2>
+                <p className="text-xs text-slate-500">
+                  โครงการนี้ไม่จำเป็นต้องใช้ร่างมาตรฐาน งานที่เพิ่มเองจะถูกบันทึกเป็นงานที่เพิ่มภายหลัง (ADDED)
+                </p>
+              </div>
+              <ManualTaskForm
+                projectId={project.id}
+                workstreams={(workstreams ?? []).map((item) => ({
+                  id: item.id,
+                  name: item.name,
+                }))}
+                people={(managerPeople ?? []).map((person) => ({
+                  id: person.id,
+                  name: person.full_name,
+                }))}
+                canAssignOthers={canManage}
+              />
+            </section>
+          )}
+
           <section className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="mb-3 text-sm font-semibold">กลุ่มงานและงาน</h2>
             {(workstreams ?? []).map((ws) => (
