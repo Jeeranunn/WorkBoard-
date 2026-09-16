@@ -183,12 +183,20 @@ export default async function ExecutiveDashboardPage() {
             เครือข่าย → องค์กร → โครงการ ทั้งหมดในระบบ
           </p>
         </div>
-        <a
-          href="/executive/export"
-          className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
-        >
-          ดาวน์โหลดรายงาน CSV
-        </a>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/executive/capacity"
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            ดู Capacity
+          </Link>
+          <a
+            href="/executive/export"
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            ดาวน์โหลดรายงาน CSV
+          </a>
+        </div>
       </div>
 
       <section className="grid gap-4 sm:grid-cols-4">
