@@ -9,16 +9,26 @@ interface NavItem {
   label: string;
 }
 
-const mainNav: NavItem[] = [
-  { href: "/overview", label: "หน้าภาพรวม" },
+const memberNav: NavItem[] = [
   { href: "/member", label: "พื้นที่สมาชิก" },
   { href: "/my-work", label: "งานของฉัน" },
   { href: "/weekly-plan", label: "แผนรายสัปดาห์" },
+  { href: "/projects", label: "โครงการ" },
 ];
 
-const workNav: NavItem[] = [
+const headNav: NavItem[] = [
+  { href: "/head", label: "พื้นที่หัวหน้าฝ่าย" },
+  { href: "/management-board", label: "บอร์ดบริหาร" },
+  { href: "/head/capacity", label: "Capacity ทีม" },
   { href: "/projects", label: "โครงการ" },
   { href: "/teams", label: "ทีม" },
+];
+
+const executiveNav: NavItem[] = [
+  { href: "/executive", label: "ภาพรวมผู้บริหาร" },
+  { href: "/management-board", label: "บอร์ดบริหาร" },
+  { href: "/executive/capacity", label: "Capacity องค์กร" },
+  { href: "/projects", label: "โครงการ" },
 ];
 
 const adminNav: NavItem[] = [
@@ -58,6 +68,34 @@ function NavLink({
   );
 }
 
+function NavSection({
+  title,
+  items,
+  pathname,
+  onNavigate,
+}: {
+  title: string;
+  items: NavItem[];
+  pathname: string;
+  onNavigate: (href: string) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+        {title}
+      </div>
+      {items.map((item) => (
+        <NavLink
+          key={item.href}
+          {...item}
+          pathname={pathname}
+          onNavigate={onNavigate}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function Sidebar({
   isAdmin,
   isExecutive,
@@ -75,13 +113,10 @@ export function Sidebar({
     pathname !== navigatingTo &&
     !pathname.startsWith(`${navigatingTo}/`);
 
-  const navProps = {
-    pathname,
-    onNavigate: setNavigatingTo,
-  };
+  const hasLeadershipWorkspace = isHead || isExecutive || isAdmin;
 
   return (
-    <nav className="relative flex h-full w-60 flex-col gap-6 border-r border-slate-200 bg-white p-4">
+    <nav className="relative flex h-full w-60 flex-col gap-5 overflow-y-auto border-r border-slate-200 bg-white p-4">
       {showNavigationIndicator && (
         <div
           aria-label="กำลังเปิดหน้า"
@@ -93,47 +128,56 @@ export function Sidebar({
 
       <div className="px-2 text-lg font-semibold tracking-tight">WorkBoard</div>
 
-      <div className="space-y-1">
-        {mainNav.map((item) => (
-          <NavLink key={item.href} {...item} {...navProps} />
-        ))}
-      </div>
+      <NavSection
+        title="พื้นที่ของฉัน"
+        items={memberNav}
+        pathname={pathname}
+        onNavigate={setNavigatingTo}
+      />
 
-      <div className="space-y-1">
-        {workNav.map((item) => (
-          <NavLink key={item.href} {...item} {...navProps} />
-        ))}
-        {(isHead || isAdmin || isExecutive) && (
-          <NavLink
-            href="/management-board"
-            label="บอร์ดบริหาร"
-            {...navProps}
-          />
-        )}
-        {(isHead || isAdmin) && (
-          <NavLink
-            href="/head"
-            label="พื้นที่หัวหน้าฝ่าย"
-            {...navProps}
-          />
-        )}
-        {(isAdmin || isExecutive) && (
-          <NavLink
-            href="/executive"
-            label="ภาพรวมผู้บริหาร"
-            {...navProps}
-          />
-        )}
-      </div>
+      {isHead && (
+        <NavSection
+          title="หัวหน้าฝ่าย"
+          items={headNav}
+          pathname={pathname}
+          onNavigate={setNavigatingTo}
+        />
+      )}
+
+      {isExecutive && (
+        <NavSection
+          title="ผู้บริหาร"
+          items={executiveNav}
+          pathname={pathname}
+          onNavigate={setNavigatingTo}
+        />
+      )}
+
+      {isAdmin && !isHead && !isExecutive && (
+        <NavSection
+          title="พื้นที่บริหาร"
+          items={[
+            { href: "/management-board", label: "บอร์ดบริหาร" },
+            { href: "/executive", label: "ภาพรวมผู้บริหาร" },
+            { href: "/head", label: "พื้นที่หัวหน้าฝ่าย" },
+          ]}
+          pathname={pathname}
+          onNavigate={setNavigatingTo}
+        />
+      )}
 
       {isAdmin && (
-        <div className="space-y-1">
-          <div className="px-3 text-xs font-medium uppercase text-slate-400">
-            ผู้ดูแลระบบ
-          </div>
-          {adminNav.map((item) => (
-            <NavLink key={item.href} {...item} {...navProps} />
-          ))}
+        <NavSection
+          title="ผู้ดูแลระบบ"
+          items={adminNav}
+          pathname={pathname}
+          onNavigate={setNavigatingTo}
+        />
+      )}
+
+      {!hasLeadershipWorkspace && (
+        <div className="mt-auto rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-500">
+          เมนูนี้แสดงเฉพาะงานและแผนที่เกี่ยวกับคุณ เพื่อให้ใช้งานได้ง่ายและไม่รก
         </div>
       )}
     </nav>
