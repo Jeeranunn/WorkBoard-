@@ -73,12 +73,13 @@ export default async function HeadWorkspacePage() {
     { data: activeTimers },
     { data: attendance },
     { data: workstreams },
+    { data: playbookTasks },
   ] = await Promise.all([
       projectIds.length
         ? supabase
             .from("tasks")
             .select(
-              "id, title, project_id, workstream_id, assignee_person_id, reviewer_person_id, approver_person_id, current_holder_person_id, status, priority, deadline, is_blocked",
+              "id, title, project_id, workstream_id, assignee_person_id, reviewer_person_id, approver_person_id, current_holder_person_id, status, priority, deadline, is_blocked, source_playbook_task_id",
             )
             .in("project_id", projectIds)
         : Promise.resolve({
@@ -95,6 +96,7 @@ export default async function HeadWorkspacePage() {
               priority: string;
               deadline: string | null;
               is_blocked: boolean;
+              source_playbook_task_id: string | null;
             }[],
           }),
       memberIds.length
@@ -124,6 +126,9 @@ export default async function HeadWorkspacePage() {
         : Promise.resolve({
             data: [] as { id: string; project_id: string; name: string }[],
           }),
+      supabase
+        .from("playbook_tasks")
+        .select("id, requires_reviewer"),
     ]);
 
   const nowIso = new Date().toISOString();
@@ -170,12 +175,11 @@ export default async function HeadWorkspacePage() {
     ["SUBMITTED", "IN_REVIEW", "RESUBMITTED", "PENDING_APPROVAL"].includes(task.status),
   );
 
-  const personOrgIds = new Map<string, Set<string>>();
-  for (const person of managedPeople ?? []) {
-    const set = personOrgIds.get(person.person_id) ?? new Set<string>();
-    set.add(person.organization_id);
-    personOrgIds.set(person.person_id, set);
-  }
+  const reviewerRequiredSourceIds = new Set(
+    (playbookTasks ?? [])
+      .filter((task) => task.requires_reviewer)
+      .map((task) => task.id),
+  );
 
   const projectCompletenessIssueCount = new Map<string, number>();
   for (const project of projects ?? []) {
@@ -187,7 +191,12 @@ export default async function HeadWorkspacePage() {
 
     let issues = project.target_date ? 0 : 1;
     issues += activeProjectTasks.filter((task) => !task.deadline).length;
-    issues += activeProjectTasks.filter((task) => !task.reviewer_person_id).length;
+    issues += activeProjectTasks.filter(
+      (task) =>
+        task.source_playbook_task_id &&
+        reviewerRequiredSourceIds.has(task.source_playbook_task_id) &&
+        !task.reviewer_person_id,
+    ).length;
     issues += projectWorkstreams.filter(
       (workstream) =>
         !activeProjectTasks.some((task) => task.workstream_id === workstream.id),
