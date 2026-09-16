@@ -29,10 +29,10 @@ as $$
   select nullif(current_setting('app.current_uid', true), '')::uuid;
 $$;
 
-do $$
+do $bootstrap$
 begin
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then
     create role authenticated nologin;
   end if;
 end;
-$;
+$bootstrap$;
