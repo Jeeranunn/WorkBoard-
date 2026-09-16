@@ -6,7 +6,7 @@ import type { PriorityLevel } from "@/lib/database.types";
 import { TimerActionForm } from "@/components/tasks/timer-action-form";
 import { WorkflowActionForm } from "@/components/tasks/workflow-action-form";
 import { TaskCommentForm } from "@/components/tasks/comment-form";
-import { LiveElapsedTime } from "@/components/time/live-elapsed-time";
+import { ElapsedTime, LiveElapsedTime } from "@/components/time/live-elapsed-time";
 import { formatThaiDateTime } from "@/lib/date-time";
 import {
   acknowledgeTaskAction,
@@ -85,6 +85,7 @@ export default async function TaskDetailPage(
     { data: submissions },
     { data: comments },
     { data: history },
+    { data: taskTimeEntries },
   ] = await Promise.all([
     supabase
       .from("projects")
@@ -129,6 +130,11 @@ export default async function TaskDetailPage(
       .select("id, changed_by_person_id, field_name, old_value, new_value, changed_at")
       .eq("task_id", taskId)
       .order("changed_at", { ascending: true }),
+    supabase
+      .from("task_time_entries")
+      .select("id, person_id, started_at, ended_at, source")
+      .eq("task_id", taskId)
+      .order("started_at", { ascending: true }),
   ]);
 
   if (!project) notFound();
@@ -172,6 +178,23 @@ export default async function TaskDetailPage(
 
   const nameById = new Map((peopleRows ?? []).map((p) => [p.id, p.full_name]));
   const name = (id: string | null) => (id ? (nameById.get(id) ?? "-") : "-");
+
+  const closedTaskSeconds = (taskTimeEntries ?? []).reduce((sum, entry) => {
+    if (!entry.ended_at) return sum;
+    return (
+      sum +
+      Math.max(
+        0,
+        Math.floor(
+          (new Date(entry.ended_at).getTime() -
+            new Date(entry.started_at).getTime()) /
+            1000,
+        ),
+      )
+    );
+  }, 0);
+  const activeTaskTimeEntry =
+    (taskTimeEntries ?? []).find((entry) => !entry.ended_at) ?? null;
 
   const isAssigneeSide =
     hasRole(user, "ADMIN") ||
@@ -442,57 +465,74 @@ export default async function TaskDetailPage(
             )}
           </section>
 
-          {canTrackOwnTime && (
+          {(taskTimeEntries ?? []).length > 0 || canTrackOwnTime ? (
             <section className="rounded-lg border border-slate-200 bg-white p-4">
               <h2 className="mb-2 text-sm font-semibold">เวลาในงานนี้</h2>
-              {myActiveTimer?.task_id === task.id ? (
-                <div className="flex items-center justify-between text-sm">
-                  <div className="text-emerald-700">
-                    <div>กำลังจับเวลาอยู่</div>
-                    <div className="mt-1 flex items-center gap-2 text-xs">
-                      <span>ใช้เวลาแล้ว</span>
-                      <LiveElapsedTime
-                        startedAt={myActiveTimer.started_at}
-                        className="font-mono text-base font-semibold tabular-nums"
-                      />
-                      <span className="text-slate-500">
-                        · เริ่ม {formatThaiDateTime(myActiveTimer.started_at)}
+              <div className="mb-3 flex flex-wrap items-baseline gap-2">
+                <span className="text-xs text-slate-500">เวลาสะสมทั้งหมด</span>
+                {activeTaskTimeEntry ? (
+                  <LiveElapsedTime
+                    startedAt={activeTaskTimeEntry.started_at}
+                    baseSeconds={closedTaskSeconds}
+                    className="font-mono text-lg font-semibold tabular-nums"
+                  />
+                ) : (
+                  <ElapsedTime
+                    seconds={closedTaskSeconds}
+                    className="font-mono text-lg font-semibold tabular-nums"
+                  />
+                )}
+                {activeTaskTimeEntry && (
+                  <span className="text-xs text-emerald-700">กำลังเดินอยู่</span>
+                )}
+              </div>
+
+              {canTrackOwnTime && (
+                <>
+                  {myActiveTimer?.task_id === task.id ? (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-emerald-700">
+                        เริ่มช่วงล่าสุด {formatThaiDateTime(myActiveTimer.started_at)}
                       </span>
+                      <TimerActionForm
+                        action={pauseTaskTimerAction}
+                        taskId={task.id}
+                        buttonLabel="หยุดชั่วคราว"
+                        pendingLabel="กำลังหยุด..."
+                        buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                      />
                     </div>
-                  </div>
-                  <TimerActionForm
-                    action={pauseTaskTimerAction}
-                    taskId={task.id}
-                    buttonLabel="หยุดชั่วคราว"
-                    pendingLabel="กำลังหยุด..."
-                    buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-                  />
-                </div>
-              ) : myActiveTimer ? (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">กำลังจับเวลางานอื่นอยู่</span>
-                  <TimerActionForm
-                    action={switchTaskTimerAction}
-                    taskId={task.id}
-                    buttonLabel="สลับมาจับเวลางานนี้"
-                    pendingLabel="กำลังสลับ..."
-                    buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
-                  />
-                </div>
-              ) : (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-400">ยังไม่ได้เริ่มจับเวลา</span>
-                  <TimerActionForm
-                    action={startTaskTimerAction}
-                    taskId={task.id}
-                    buttonLabel="เริ่มจับเวลางานนี้"
-                    pendingLabel="กำลังเริ่ม..."
-                    buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
-                  />
-                </div>
+                  ) : myActiveTimer ? (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">กำลังจับเวลางานอื่นอยู่</span>
+                      <TimerActionForm
+                        action={switchTaskTimerAction}
+                        taskId={task.id}
+                        buttonLabel="สลับมาจับเวลางานนี้"
+                        pendingLabel="กำลังสลับ..."
+                        buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-400">
+                        {closedTaskSeconds > 0
+                          ? "หยุดจับเวลาอยู่ — เริ่มต่อได้จากเวลาสะสมเดิม"
+                          : "ยังไม่ได้เริ่มจับเวลา"}
+                      </span>
+                      <TimerActionForm
+                        action={startTaskTimerAction}
+                        taskId={task.id}
+                        buttonLabel={closedTaskSeconds > 0 ? "ทำงานต่อ" : "เริ่มจับเวลางานนี้"}
+                        pendingLabel="กำลังเริ่ม..."
+                        buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </section>
-          )}
+          ) : null}
 
           {/* Activity feed */}
           <section className="rounded-lg border border-slate-200 bg-white p-4">
