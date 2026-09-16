@@ -59,7 +59,8 @@ export default async function MemberWorkspacePage() {
     supabase
       .from("suggestions")
       .select("id, task_id")
-      .eq("status", "pending"),
+      .in("status", ["pending", "accepted"])
+      .is("applied_at", null),
   ]);
 
   const activeTask = activeTimer
@@ -98,7 +99,7 @@ export default async function MemberWorkspacePage() {
           <div className="mt-2 text-2xl font-semibold">{p1.length}</div>
         </Link>
         <Link href="/weekly-plan" className="rounded-xl border border-slate-200 bg-white p-4 hover:shadow-sm">
-          <div className="text-xs text-slate-500">คำแนะนำที่รอตอบ</div>
+          <div className="text-xs text-slate-500">คำแนะนำที่ต้องจัดการ</div>
           <div className="mt-2 text-2xl font-semibold">{(suggestions ?? []).length}</div>
         </Link>
       </section>
