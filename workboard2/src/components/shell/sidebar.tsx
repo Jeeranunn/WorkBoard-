@@ -11,6 +11,7 @@ interface NavItem {
 
 const mainNav: NavItem[] = [
   { href: "/overview", label: "หน้าภาพรวม" },
+  { href: "/member", label: "พื้นที่สมาชิก" },
   { href: "/my-work", label: "งานของฉัน" },
   { href: "/weekly-plan", label: "แผนรายสัปดาห์" },
 ];
