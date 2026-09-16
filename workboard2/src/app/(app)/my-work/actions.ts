@@ -15,6 +15,8 @@ async function callAttendanceRpc(
   if (error) return { error: error.message };
   revalidatePath("/my-work");
   revalidatePath("/overview");
+  revalidatePath("/member");
+  revalidatePath("/head");
   return { error: null };
 }
 
