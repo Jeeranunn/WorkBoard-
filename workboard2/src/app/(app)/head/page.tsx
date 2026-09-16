@@ -70,7 +70,7 @@ export default async function HeadWorkspacePage() {
     orgIds.length
       ? supabase
           .from("projects")
-          .select("id, name, organization_id, health, status")
+          .select("id, name, organization_id, health, status, target_date")
           .in("organization_id", orgIds)
           .eq("is_active", true)
       : Promise.resolve({
@@ -80,19 +80,24 @@ export default async function HeadWorkspacePage() {
             organization_id: string;
             health: string;
             status: string;
+            target_date: string | null;
           }[],
         }),
   ]);
 
   const projectIds = (projects ?? []).map((project) => project.id);
 
-  const [{ data: tasks }, { data: activeTimers }, { data: attendance }] =
-    await Promise.all([
+  const [
+    { data: tasks },
+    { data: activeTimers },
+    { data: attendance },
+    { data: workstreams },
+  ] = await Promise.all([
       projectIds.length
         ? supabase
             .from("tasks")
             .select(
-              "id, title, project_id, assignee_person_id, reviewer_person_id, approver_person_id, current_holder_person_id, status, priority, deadline, is_blocked",
+              "id, title, project_id, workstream_id, assignee_person_id, reviewer_person_id, approver_person_id, current_holder_person_id, status, priority, deadline, is_blocked",
             )
             .in("project_id", projectIds)
             .in("status", ACTIVE_TASK_STATUSES)
@@ -101,6 +106,7 @@ export default async function HeadWorkspacePage() {
               id: string;
               title: string;
               project_id: string;
+              workstream_id: string | null;
               assignee_person_id: string;
               reviewer_person_id: string | null;
               approver_person_id: string | null;
@@ -128,6 +134,15 @@ export default async function HeadWorkspacePage() {
             .is("clock_out_at", null)
         : Promise.resolve({
             data: [] as { person_id: string; clock_in_at: string }[],
+          }),
+      projectIds.length
+        ? supabase
+            .from("workstreams")
+            .select("id, project_id, name")
+            .in("project_id", projectIds)
+            .eq("is_active", true)
+        : Promise.resolve({
+            data: [] as { id: string; project_id: string; name: string }[],
           }),
     ]);
 
@@ -167,6 +182,37 @@ export default async function HeadWorkspacePage() {
   const reviewQueue = (tasks ?? []).filter((task) =>
     ["SUBMITTED", "IN_REVIEW", "RESUBMITTED", "PENDING_APPROVAL"].includes(task.status),
   );
+
+  const positionById = new Map((positions ?? []).map((position) => [position.id, position]));
+  const unitById = new Map((units ?? []).map((unit) => [unit.id, unit]));
+  const personOrgIds = new Map<string, Set<string>>();
+  for (const appointment of appointments ?? []) {
+    const position = positionById.get(appointment.position_id);
+    const unit = position ? unitById.get(position.unit_id) : null;
+    if (!unit) continue;
+    const set = personOrgIds.get(appointment.person_id) ?? new Set<string>();
+    set.add(unit.organization_id);
+    personOrgIds.set(appointment.person_id, set);
+  }
+
+  const projectCompletenessIssueCount = new Map<string, number>();
+  for (const project of projects ?? []) {
+    const projectTasks = (tasks ?? []).filter((task) => task.project_id === project.id);
+    const activeProjectTasks = projectTasks.filter((task) => task.status !== "CANCELLED");
+    const projectWorkstreams = (workstreams ?? []).filter(
+      (workstream) => workstream.project_id === project.id,
+    );
+
+    let issues = project.target_date ? 0 : 1;
+    issues += activeProjectTasks.filter((task) => !task.deadline).length;
+    issues += activeProjectTasks.filter((task) => !task.reviewer_person_id).length;
+    issues += projectWorkstreams.filter(
+      (workstream) =>
+        !activeProjectTasks.some((task) => task.workstream_id === workstream.id),
+    ).length;
+
+    projectCompletenessIssueCount.set(project.id, issues);
+  }
 
   return (
     <div className="space-y-7">
@@ -286,7 +332,14 @@ export default async function HeadWorkspacePage() {
               </div>
               <TaskPeopleForm
                 taskId={task.id}
-                people={(people ?? []).map((person) => ({ id: person.id, name: person.full_name }))}
+                people={(people ?? [])
+                  .filter((person) => {
+                    const project = (projects ?? []).find((item) => item.id === task.project_id);
+                    return project
+                      ? personOrgIds.get(person.id)?.has(project.organization_id)
+                      : false;
+                  })
+                  .map((person) => ({ id: person.id, name: person.full_name }))}
                 assigneePersonId={task.assignee_person_id}
                 reviewerPersonId={task.reviewer_person_id}
                 approverPersonId={task.approver_person_id}
@@ -333,6 +386,20 @@ export default async function HeadWorkspacePage() {
                 <div>
                   <div className="text-sm font-medium">{project.name}</div>
                   <div className="mt-1 text-xs text-slate-400">{project.status}</div>
+                  <div
+                    className={
+                      "mt-1 text-xs " +
+                      ((projectCompletenessIssueCount.get(project.id) ?? 0) === 0
+                        ? "text-emerald-600"
+                        : "text-amber-600")
+                    }
+                  >
+                    {(projectCompletenessIssueCount.get(project.id) ?? 0) === 0
+                      ? "ข้อมูลโครงการครบตามเกณฑ์พื้นฐาน"
+                      : "มี " +
+                        (projectCompletenessIssueCount.get(project.id) ?? 0) +
+                        " จุดที่ต้องเติม"}
+                  </div>
                 </div>
                 <span className="text-xs text-slate-500">{project.health}</span>
               </Link>
