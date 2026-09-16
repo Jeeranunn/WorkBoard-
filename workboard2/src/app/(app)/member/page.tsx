@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { ACTIVE_TASK_STATUSES, TASK_STATUS_LABELS } from "@/lib/task-labels";
 import { bangkokTodayKey, formatThaiDateTime } from "@/lib/date-time";
 import { LiveElapsedTime } from "@/components/time/live-elapsed-time";
+import { QuickPriorityForm } from "@/components/tasks/quick-priority-form";
 
 export default async function MemberWorkspacePage() {
   const user = await getCurrentUser();
@@ -35,7 +36,7 @@ export default async function MemberWorkspacePage() {
       .maybeSingle(),
     supabase
       .from("tasks")
-      .select("id, title, status, priority, deadline, current_holder_person_id")
+      .select("id, title, status, priority, deadline, current_holder_person_id, is_important, is_urgent")
       .or(
         `assignee_person_id.eq.${user.personId},reviewer_person_id.eq.${user.personId},approver_person_id.eq.${user.personId}`,
       )
@@ -176,16 +177,33 @@ export default async function MemberWorkspacePage() {
         </div>
         <div className="mt-3 divide-y divide-slate-100">
           {waitingForMe.slice(0, 8).map((task) => (
-            <Link key={task.id} href={`/tasks/${task.id}`} className="flex items-center justify-between gap-3 py-3 hover:bg-slate-50">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium">{task.title}</div>
-                <div className="mt-1 text-xs text-slate-400">
-                  {TASK_STATUS_LABELS[task.status]}
-                  {task.deadline ? ` · ${formatThaiDateTime(task.deadline)}` : ""}
+            <div key={task.id} className="py-3">
+              <div className="flex items-start justify-between gap-3">
+                <Link href={`/tasks/${task.id}`} className="min-w-0 flex-1 hover:bg-slate-50">
+                  <div className="truncate text-sm font-medium">{task.title}</div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {TASK_STATUS_LABELS[task.status]}
+                    {task.deadline ? ` · ${formatThaiDateTime(task.deadline)}` : ""}
+                  </div>
+                </Link>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium">
+                    {task.priority}
+                  </span>
+                  <Link
+                    href={`/tasks/${task.id}`}
+                    className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium"
+                  >
+                    แก้ไข
+                  </Link>
                 </div>
               </div>
-              <span className="rounded bg-slate-100 px-2 py-1 text-xs font-medium">{task.priority}</span>
-            </Link>
+              <QuickPriorityForm
+                taskId={task.id}
+                isImportant={task.is_important}
+                isUrgent={task.is_urgent}
+              />
+            </div>
           ))}
           {waitingForMe.length === 0 && (
             <p className="py-6 text-center text-sm text-slate-400">ไม่มีงานที่รอคุณอยู่ตอนนี้</p>
