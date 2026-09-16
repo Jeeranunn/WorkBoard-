@@ -240,24 +240,37 @@ export async function endUnit(
   _state: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  return endDatedRow(
-    "organization_units",
-    str(formData, "id"),
-    "/admin/units",
-    "สิ้นสุดหน่วยงานแล้ว",
-  );
+  const id = str(formData, "id");
+  if (!id) return { error: "ไม่พบหน่วยงาน" };
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("end_unit_lifecycle", {
+    p_unit_id: id,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/units");
+  revalidatePath("/admin/positions");
+  revalidatePath("/admin/members");
+  revalidatePath("/head");
+  return { error: null, success: "สิ้นสุดหน่วยงานและโครงสร้างย่อยที่เกี่ยวข้องแล้ว" };
 }
 
 export async function endPosition(
   _state: AdminFormState,
   formData: FormData,
 ): Promise<AdminFormState> {
-  return endDatedRow(
-    "positions",
-    str(formData, "id"),
-    "/admin/positions",
-    "สิ้นสุดตำแหน่งแล้ว",
-  );
+  const id = str(formData, "id");
+  if (!id) return { error: "ไม่พบตำแหน่ง" };
+  await requireAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("end_position_lifecycle", {
+    p_position_id: id,
+  });
+  if (error) return { error: error.message };
+  revalidatePath("/admin/positions");
+  revalidatePath("/admin/members");
+  revalidatePath("/head");
+  return { error: null, success: "สิ้นสุดตำแหน่งและการแต่งตั้งที่เกี่ยวข้องแล้ว" };
 }
 
 export async function endAppointment(
