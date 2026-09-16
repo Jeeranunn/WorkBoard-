@@ -337,7 +337,7 @@ export default async function WeeklyPlanPage() {
         <section className="rounded-xl border border-slate-200 bg-white p-4">
           <h2 className="font-semibold">เพิ่มงานส่วนตัว</h2>
           <p className="mb-3 text-xs text-slate-500">
-            รายการนี้เป็นส่วนตัว ผู้บริหารไม่เห็นเนื้อหางาน
+            รายการนี้เป็นงานนอก WorkBoard และใช้ประกอบการวาง Capacity; ผู้บริหารและหัวหน้าฝ่ายที่เกี่ยวข้องสามารถเห็นชื่อและรายละเอียดได้
           </p>
           <PlannerActionForm
             action={addPersonalItemAction}
