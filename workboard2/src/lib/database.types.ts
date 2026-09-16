@@ -1064,6 +1064,19 @@ export interface Database {
         Args: { p_unit_id: string };
         Returns: Database["public"]["Tables"]["organization_units"]["Row"];
       };
+      capacity_time_snapshot: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          person_id: string;
+          attendance_session_id: string | null;
+          clock_in_at: string | null;
+          is_on_break: boolean;
+          break_started_at: string | null;
+          active_task_id: string | null;
+          active_task_started_at: string | null;
+          active_task_accumulated_seconds: number;
+        }[];
+      };
     };
     Enums: {
       app_role: AppRole;
