@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, hasRole } from "@/lib/auth";
-import { bangkokTodayKey } from "@/lib/date-time";
+import { bangkokTodayKey, formatThaiDateTime } from "@/lib/date-time";
+import { LiveElapsedTime } from "@/components/time/live-elapsed-time";
 
 export default async function ExecutiveCapacityPage() {
   const user = await getCurrentUser();
@@ -17,15 +18,12 @@ export default async function ExecutiveCapacityPage() {
 
   const [
     { data: people },
-    { data: attendance },
+    { data: timeSnapshot },
     { data: availability },
     { data: slots },
   ] = await Promise.all([
     supabase.from("people").select("id, full_name").order("full_name"),
-    supabase
-      .from("attendance_sessions")
-      .select("person_id, clock_in_at")
-      .is("clock_out_at", null),
+    supabase.rpc("capacity_time_snapshot"),
     supabase
       .from("availability")
       .select("person_id, date, start_time, end_time, status, note")
@@ -48,11 +46,14 @@ export default async function ExecutiveCapacityPage() {
     ),
   ];
   const taskIds = [
-    ...new Set(
-      (slots ?? [])
+    ...new Set([
+      ...(slots ?? [])
         .map((slot) => slot.workboard_task_id)
         .filter((id): id is string => Boolean(id)),
-    ),
+      ...(timeSnapshot ?? [])
+        .map((row) => row.active_task_id)
+        .filter((id): id is string => Boolean(id)),
+    ]),
   ];
 
   const [{ data: personalItems }, { data: tasks }] = await Promise.all([
@@ -72,7 +73,9 @@ export default async function ExecutiveCapacityPage() {
   const nameById = new Map((people ?? []).map((person) => [person.id, person.full_name]));
   const personalById = new Map((personalItems ?? []).map((item) => [item.id, item]));
   const taskById = new Map((tasks ?? []).map((task) => [task.id, task]));
-  const attendanceByPerson = new Map((attendance ?? []).map((row) => [row.person_id, row]));
+  const timeByPerson = new Map(
+    (timeSnapshot ?? []).map((row) => [row.person_id, row]),
+  );
 
   const availabilityByPerson = new Map<string, NonNullable<typeof availability>>();
   for (const row of availability ?? []) {
@@ -120,6 +123,7 @@ export default async function ExecutiveCapacityPage() {
             {(people ?? []).map((person) => {
               const personAvailability = availabilityByPerson.get(person.id) ?? [];
               const personSlots = slotsByPerson.get(person.id) ?? [];
+              const time = timeByPerson.get(person.id);
 
               return (
                 <tr key={person.id} className="border-t border-slate-100 align-top">
@@ -127,8 +131,22 @@ export default async function ExecutiveCapacityPage() {
                     {nameById.get(person.id) ?? "-"}
                   </td>
                   <td className="px-4 py-4">
-                    {attendanceByPerson.has(person.id) ? (
-                      <span className="text-emerald-700">Clock In อยู่</span>
+                    {time?.clock_in_at ? (
+                      <div className="space-y-1">
+                        <div className={time.is_on_break ? "text-amber-600" : "text-emerald-700"}>
+                          {time.is_on_break ? "กำลังพัก" : "Clock In อยู่"}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          เข้า {formatThaiDateTime(time.clock_in_at)}
+                        </div>
+                        <div className="flex items-center gap-1 text-xs">
+                          <span className="text-slate-400">ผ่านมา</span>
+                          <LiveElapsedTime
+                            startedAt={time.clock_in_at}
+                            className="font-mono font-semibold tabular-nums"
+                          />
+                        </div>
+                      </div>
                     ) : (
                       <span className="text-slate-400">ยังไม่ Clock In</span>
                     )}
@@ -181,7 +199,25 @@ export default async function ExecutiveCapacityPage() {
                           </div>
                         );
                       })}
-                      {personSlots.length === 0 && (
+                      {time?.active_task_id && time.active_task_started_at && (
+                        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2">
+                          <div className="text-[11px] text-emerald-700">
+                            กำลังจับเวลางานจริง
+                          </div>
+                          <div className="mt-1 text-sm font-medium">
+                            {taskById.get(time.active_task_id)?.title ?? "งาน WorkBoard"}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1 text-xs text-emerald-700">
+                            <span>เวลาสะสม</span>
+                            <LiveElapsedTime
+                              startedAt={time.active_task_started_at}
+                              baseSeconds={time.active_task_accumulated_seconds}
+                              className="font-mono font-semibold tabular-nums"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      {personSlots.length === 0 && !time?.active_task_id && (
                         <span className="text-xs text-slate-400">ยังไม่มีรายการในแผน</span>
                       )}
                     </div>
