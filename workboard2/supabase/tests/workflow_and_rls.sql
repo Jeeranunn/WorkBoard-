@@ -232,10 +232,15 @@ end;
 $$;
 
 -- ===========================================================================
--- 4. Time tracking sequence (MEMBER-A, using t4 which stays ASSIGNED).
+-- 4. Time tracking sequence (MEMBER-A).
+-- Timers now require a working task state, so move t4/t3 into IN_PROGRESS.
 -- ===========================================================================
 
 set app.current_uid = '10000000-0000-0000-0000-000000000005'; -- MEMBER-A
+select acknowledge_task('70000000-0000-0000-0000-000000000004');
+select start_task('70000000-0000-0000-0000-000000000004');
+select acknowledge_task('70000000-0000-0000-0000-000000000003');
+select start_task('70000000-0000-0000-0000-000000000003');
 select clock_in();
 
 do $$
