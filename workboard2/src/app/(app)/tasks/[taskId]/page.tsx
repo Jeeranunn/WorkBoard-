@@ -5,6 +5,7 @@ import { TASK_STATUS_LABELS, WORK_ORIGIN_LABELS } from "@/lib/task-labels";
 import type { PriorityLevel } from "@/lib/database.types";
 import { TimerActionForm } from "@/components/tasks/timer-action-form";
 import { WorkflowActionForm } from "@/components/tasks/workflow-action-form";
+import { TaskCommentForm } from "@/components/tasks/comment-form";
 import { LiveElapsedTime } from "@/components/time/live-elapsed-time";
 import { formatThaiDateTime } from "@/lib/date-time";
 import {
@@ -20,7 +21,6 @@ import {
   startTaskTimerAction,
   switchTaskTimerAction,
   pauseTaskTimerAction,
-  addCommentAction,
 } from "../actions";
 
 const PRIORITY_STYLES: Record<PriorityLevel, string> = {
@@ -511,23 +511,7 @@ export default async function TaskDetailPage(
               ))}
             </div>
 
-            <form action={addCommentAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
-              <input type="hidden" name="task_id" value={task.id} />
-              <textarea
-                name="body"
-                placeholder="เขียนความคิดเห็นหรือคำถาม"
-                required
-                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-                rows={2}
-              />
-              <label className="flex items-center gap-2 text-xs text-slate-500">
-                <input type="checkbox" name="is_question" />
-                เป็นคำถาม
-              </label>
-              <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
-                ส่งความคิดเห็น
-              </button>
-            </form>
+            <TaskCommentForm taskId={task.id} />
           </section>
         </div>
 
