@@ -17,13 +17,7 @@ import { pauseTaskTimerAction } from "../tasks/actions";
 import { TimerActionForm } from "@/components/tasks/timer-action-form";
 import { AttendanceActionForm } from "@/components/time/attendance-action-form";
 import { LiveElapsedTime } from "@/components/time/live-elapsed-time";
-
-function formatTime(value: string): string {
-  return new Date(value).toLocaleString("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
+import { formatThaiDateTime, bangkokTodayKey } from "@/lib/date-time";
 
 interface RawTask {
   id: string;
@@ -50,10 +44,11 @@ export default async function MyWorkPage() {
 
   const now = new Date();
   const nowIso = now.toISOString();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-  const tomorrowStartIso = tomorrowStart.toISOString();
-  const weekAheadIso = new Date(todayStart.getTime() + 8 * 24 * 60 * 60 * 1000).toISOString();
+  const todayKey = bangkokTodayKey(now);
+  const [todayYear, todayMonth, todayDay] = todayKey.split("-").map(Number);
+  const bangkokMidnightUtc = Date.UTC(todayYear, todayMonth - 1, todayDay) - 7 * 60 * 60 * 1000;
+  const tomorrowStartIso = new Date(bangkokMidnightUtc + 24 * 60 * 60 * 1000).toISOString();
+  const weekAheadIso = new Date(bangkokMidnightUtc + 8 * 24 * 60 * 60 * 1000).toISOString();
 
   // The 7 buckets below (overdue/waitingForMe/dueToday/p1/inProgress/upcoming/
   // waitingForOthers) used to be 7 separate queries, but every one of them is
@@ -181,11 +176,11 @@ export default async function MyWorkPage() {
         <div className="text-sm">
           {!attendanceSession && <span className="text-slate-400">ยังไม่ได้ Clock In</span>}
           {attendanceSession && !activeBreak && (
-            <span>เข้างานเมื่อ {formatTime(attendanceSession.clock_in_at)}</span>
+            <span>เข้างานเมื่อ {formatThaiDateTime(attendanceSession.clock_in_at)}</span>
           )}
           {attendanceSession && activeBreak && (
             <span className="text-amber-600">
-              กำลังพักตั้งแต่ {formatTime(activeBreak.break_start_at)}
+              กำลังพักตั้งแต่ {formatThaiDateTime(activeBreak.break_start_at)}
             </span>
           )}
         </div>
@@ -240,7 +235,7 @@ export default async function MyWorkPage() {
                 startedAt={activeTimer.started_at}
                 className="font-mono text-base font-semibold tabular-nums"
               />
-              <span className="text-slate-500">· เริ่ม {formatTime(activeTimer.started_at)}</span>
+              <span className="text-slate-500">· เริ่ม {formatThaiDateTime(activeTimer.started_at)}</span>
             </div>
           </div>
           <TimerActionForm
