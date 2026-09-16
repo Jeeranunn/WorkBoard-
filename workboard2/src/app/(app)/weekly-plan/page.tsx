@@ -3,14 +3,25 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { ACTIVE_TASK_STATUSES } from "@/lib/task-labels";
 import { PlannerActionForm } from "@/components/planner/action-form";
-import { bangkokTodayKey, bangkokWeekDateKeys, formatThaiDate } from "@/lib/date-time";
+import {
+  bangkokTodayKey,
+  bangkokWeekDateKeys,
+  formatThaiDate,
+  toBangkokDateTimeLocalValue,
+} from "@/lib/date-time";
 import {
   addAvailabilityAction,
   addPersonalItemAction,
   addPlannedSlotAction,
   applySuggestionAction,
+  deleteAvailabilityAction,
+  deletePersonalItemAction,
+  deletePlannedSlotAction,
+  reschedulePlannedSlotAction,
   respondSuggestionAction,
   togglePersonalItemAction,
+  updateAvailabilityAction,
+  updatePersonalItemAction,
 } from "./actions";
 
 const availabilityLabel = {
@@ -45,7 +56,7 @@ export default async function WeeklyPlanPage() {
     supabase
       .from("personal_planner_items")
       .select(
-        "id, title, deadline, estimated_hours, is_important, is_urgent, completed_at",
+        "id, title, notes, deadline, estimated_hours, is_important, is_urgent, completed_at",
       )
       .eq("person_id", user.personId)
       .order("completed_at", { ascending: true, nullsFirst: true })
@@ -201,9 +212,74 @@ export default async function WeeklyPlanPage() {
                       key={block.id}
                       className="rounded-md bg-slate-50 px-2 py-1.5 text-xs text-slate-600"
                     >
-                      {block.start_time.slice(0, 5)}–{block.end_time.slice(0, 5)} ·{" "}
-                      {availabilityLabel[block.status]}
-                      {block.note ? ` · ${block.note}` : ""}
+                      <div>
+                        {block.start_time.slice(0, 5)}–{block.end_time.slice(0, 5)} ·{" "}
+                        {availabilityLabel[block.status]}
+                        {block.note ? ` · ${block.note}` : ""}
+                      </div>
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-[11px] text-slate-400">
+                          แก้ไข / ลบ
+                        </summary>
+                        <div className="mt-2 space-y-2">
+                          <PlannerActionForm
+                            action={updateAvailabilityAction}
+                            submitLabel="บันทึกการแก้ไข"
+                            className="space-y-2"
+                            buttonClassName="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium disabled:opacity-60"
+                          >
+                            <input type="hidden" name="availability_id" value={block.id} />
+                            <input
+                              name="date"
+                              type="date"
+                              required
+                              min={startDate}
+                              max={endDate}
+                              defaultValue={block.date}
+                              className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
+                            />
+                            <div className="grid grid-cols-2 gap-1">
+                              <input
+                                name="start_time"
+                                type="time"
+                                required
+                                defaultValue={block.start_time.slice(0, 5)}
+                                className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                              />
+                              <input
+                                name="end_time"
+                                type="time"
+                                required
+                                defaultValue={block.end_time.slice(0, 5)}
+                                className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                              />
+                            </div>
+                            <select
+                              name="status"
+                              defaultValue={block.status}
+                              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1 text-xs"
+                            >
+                              <option value="free">ว่าง</option>
+                              <option value="maybe">อาจว่าง</option>
+                              <option value="busy">ไม่ว่าง</option>
+                            </select>
+                            <input
+                              name="note"
+                              defaultValue={block.note ?? ""}
+                              placeholder="เหตุผล / บริบท"
+                              className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
+                            />
+                          </PlannerActionForm>
+                          <PlannerActionForm
+                            action={deleteAvailabilityAction}
+                            submitLabel="ลบช่วงเวลา"
+                            className="space-y-1"
+                            buttonClassName="rounded-md border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 disabled:opacity-60"
+                          >
+                            <input type="hidden" name="availability_id" value={block.id} />
+                          </PlannerActionForm>
+                        </div>
+                      </details>
                     </div>
                   ))}
 
@@ -227,6 +303,54 @@ export default async function WeeklyPlanPage() {
                         <div className="mt-1 text-[11px] text-slate-400">
                           {formal ? "งาน WorkBoard" : "งานส่วนตัว"}
                         </div>
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-[11px] text-slate-400">
+                            ย้ายเวลา / เอาออก
+                          </summary>
+                          <div className="mt-2 space-y-2">
+                            <PlannerActionForm
+                              action={reschedulePlannedSlotAction}
+                              submitLabel="ย้ายเวลา"
+                              className="space-y-2"
+                              buttonClassName="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium disabled:opacity-60"
+                            >
+                              <input type="hidden" name="slot_id" value={slot.id} />
+                              <input
+                                name="date"
+                                type="date"
+                                required
+                                min={startDate}
+                                max={endDate}
+                                defaultValue={slot.date}
+                                className="w-full rounded-md border border-slate-300 px-2 py-1 text-xs"
+                              />
+                              <div className="grid grid-cols-2 gap-1">
+                                <input
+                                  name="start_time"
+                                  type="time"
+                                  required
+                                  defaultValue={slot.start_time.slice(0, 5)}
+                                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                                />
+                                <input
+                                  name="end_time"
+                                  type="time"
+                                  required
+                                  defaultValue={slot.end_time.slice(0, 5)}
+                                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                                />
+                              </div>
+                            </PlannerActionForm>
+                            <PlannerActionForm
+                              action={deletePlannedSlotAction}
+                              submitLabel="เอาออกจากตาราง"
+                              className="space-y-1"
+                              buttonClassName="rounded-md border border-red-200 px-2 py-1 text-[11px] font-medium text-red-600 disabled:opacity-60"
+                            >
+                              <input type="hidden" name="slot_id" value={slot.id} />
+                            </PlannerActionForm>
+                          </div>
+                        </details>
                       </div>
                     );
                   })}
@@ -304,7 +428,7 @@ export default async function WeeklyPlanPage() {
         <section className="rounded-xl border border-slate-200 bg-white p-4">
           <h2 className="font-semibold">เวลาว่าง / ไม่ว่าง</h2>
           <p className="mb-3 text-xs text-slate-500">
-            ใช้ช่วยวางแผนกำลังคน โดยงานส่วนตัวยังคงเป็นส่วนตัว
+            ใช้ช่วยวางแผนกำลังคน โดยหัวหน้าฝ่ายที่เกี่ยวข้องและผู้บริหารเห็นบริบทตามสิทธิ์ Capacity
           </p>
           <PlannerActionForm
             action={addAvailabilityAction}
@@ -406,7 +530,7 @@ export default async function WeeklyPlanPage() {
               key={item.id}
               className="flex flex-wrap items-center justify-between gap-3 py-3"
             >
-              <div>
+              <div className="min-w-0 flex-1">
                 <div
                   className={
                     item.completed_at
@@ -416,11 +540,80 @@ export default async function WeeklyPlanPage() {
                 >
                   {item.title}
                 </div>
+                {item.notes && (
+                  <div className="mt-1 text-xs text-slate-500">{item.notes}</div>
+                )}
                 <div className="mt-1 text-xs text-slate-400">
                   {item.is_important ? "สำคัญ" : "ไม่สำคัญ"} ·{" "}
                   {item.is_urgent ? "เร่งด่วน" : "ไม่เร่งด่วน"}
                   {item.estimated_hours ? ` · ${item.estimated_hours} ชม.` : ""}
                 </div>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs text-slate-500">
+                    แก้ไขรายละเอียด
+                  </summary>
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    <PlannerActionForm
+                      action={updatePersonalItemAction}
+                      submitLabel="บันทึกการแก้ไข"
+                      className="space-y-2 md:col-span-2"
+                    >
+                      <input type="hidden" name="item_id" value={item.id} />
+                      <input
+                        name="title"
+                        required
+                        defaultValue={item.title}
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      />
+                      <textarea
+                        name="notes"
+                        rows={2}
+                        defaultValue={item.notes ?? ""}
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      />
+                      <input
+                        name="deadline"
+                        type="datetime-local"
+                        defaultValue={toBangkokDateTimeLocalValue(item.deadline)}
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      />
+                      <input
+                        name="estimated_hours"
+                        type="number"
+                        min="0.25"
+                        step="0.25"
+                        defaultValue={item.estimated_hours ?? ""}
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      />
+                      <div className="flex flex-wrap gap-4 text-sm">
+                        <label className="flex items-center gap-2">
+                          <input
+                            name="is_important"
+                            type="checkbox"
+                            defaultChecked={item.is_important}
+                          />
+                          สำคัญ
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            name="is_urgent"
+                            type="checkbox"
+                            defaultChecked={item.is_urgent}
+                          />
+                          เร่งด่วน
+                        </label>
+                      </div>
+                    </PlannerActionForm>
+                    <PlannerActionForm
+                      action={deletePersonalItemAction}
+                      submitLabel="ลบงานส่วนตัว"
+                      className="space-y-1"
+                      buttonClassName="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 disabled:opacity-60"
+                    >
+                      <input type="hidden" name="item_id" value={item.id} />
+                    </PlannerActionForm>
+                  </div>
+                </details>
               </div>
               <PlannerActionForm
                 action={togglePersonalItemAction}
