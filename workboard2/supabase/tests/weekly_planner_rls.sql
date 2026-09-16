@@ -279,9 +279,34 @@ begin
      or (select is_urgent from tasks where id = '70000000-0000-0000-0000-000000000004') <> v_before_urgent then
     raise exception 'ASSERTION_FAILURE: accepting a suggestion must not itself write tasks.is_important/is_urgent';
   end if;
-  raise notice 'OK: MEMBER-A accepted the suggestion via respond_to_suggestion(); task columns still untouched (proposal only)';
+  raise notice 'OK: MEMBER-A accepted the suggestion; task columns remain unchanged until explicit apply';
 end;
-$$;
+$;
+
+do $
+declare
+  v_suggestion_id uuid;
+begin
+  select id into v_suggestion_id
+  from suggestions
+  where task_id = '70000000-0000-0000-0000-000000000004'
+  order by created_at desc
+  limit 1;
+
+  perform apply_accepted_suggestion(v_suggestion_id);
+
+  if not (select is_important from tasks where id = '70000000-0000-0000-0000-000000000004')
+     or not (select is_urgent from tasks where id = '70000000-0000-0000-0000-000000000004') then
+    raise exception 'ASSERTION_FAILURE: applying accepted suggestion should set t4 to P1 flags';
+  end if;
+
+  if (select applied_at from suggestions where id = v_suggestion_id) is null then
+    raise exception 'ASSERTION_FAILURE: applied suggestion must record applied_at';
+  end if;
+
+  raise notice 'OK: accepted suggestion applied explicitly and task priority flags updated';
+end;
+$;
 
 -- Responding twice must fail (immutable once answered).
 do $$
