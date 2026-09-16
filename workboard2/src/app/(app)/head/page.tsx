@@ -31,23 +31,21 @@ export default async function HeadWorkspacePage() {
 
   const orgIds = (organizations ?? []).map((org) => org.id);
 
-  const { data: managedPeople } = orgIds.length
-    ? await supabase.rpc("managed_people_in_organizations", {
-        p_organization_ids: orgIds,
-      })
-    : {
-        data: [] as {
-          person_id: string;
-          full_name: string;
-          organization_id: string;
-        }[],
-      };
-
-  const memberIds = [
-    ...new Set((managedPeople ?? []).map((person) => person.person_id)),
-  ];
-
-  const [{ data: projects }] = await Promise.all([
+  // managed_people_in_organizations and projects both only depend on orgIds
+  // (already known at this point) — not on each other — so they belong in
+  // the same round trip instead of two sequential awaits.
+  const [{ data: managedPeople }, { data: projects }] = await Promise.all([
+    orgIds.length
+      ? supabase.rpc("managed_people_in_organizations", {
+          p_organization_ids: orgIds,
+        })
+      : Promise.resolve({
+          data: [] as {
+            person_id: string;
+            full_name: string;
+            organization_id: string;
+          }[],
+        }),
     orgIds.length
       ? supabase
           .from("projects")
@@ -65,6 +63,10 @@ export default async function HeadWorkspacePage() {
           }[],
         }),
   ]);
+
+  const memberIds = [
+    ...new Set((managedPeople ?? []).map((person) => person.person_id)),
+  ];
 
   const projectIds = (projects ?? []).map((project) => project.id);
 
