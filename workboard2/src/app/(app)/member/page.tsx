@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { ACTIVE_TASK_STATUSES, TASK_STATUS_LABELS } from "@/lib/task-labels";
-import { formatThaiDateTime } from "@/lib/date-time";
+import { bangkokTodayKey, formatThaiDateTime } from "@/lib/date-time";
 import { LiveElapsedTime } from "@/components/time/live-elapsed-time";
 
 export default async function MemberWorkspacePage() {
@@ -11,6 +11,7 @@ export default async function MemberWorkspacePage() {
 
   const supabase = await createClient();
   const nowIso = new Date().toISOString();
+  const today = bangkokTodayKey();
 
   const [
     { data: attendance },
@@ -44,6 +45,7 @@ export default async function MemberWorkspacePage() {
       .from("planned_slots")
       .select("id, date, start_time, end_time, workboard_task_id, personal_planner_item_id")
       .eq("person_id", user.personId)
+      .gte("date", today)
       .order("date")
       .order("start_time")
       .limit(8),
