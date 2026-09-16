@@ -26,27 +26,15 @@ export async function createProjectAction(formData: FormData) {
   const supabase = await createClient();
   const playbookId = optionalStr(formData, "playbook_id");
 
-  const { data, error } = await supabase
-    .from("projects")
-    .insert({
-      organization_id: organizationId,
-      owner_person_id: user.personId,
-      name,
-      description: optionalStr(formData, "description"),
-      start_date: optionalStr(formData, "start_date"),
-      target_date: optionalStr(formData, "target_date"),
-    })
-    .select("id")
-    .single();
+  const { data, error } = await supabase.rpc("create_project_with_optional_playbook", {
+    p_organization_id: organizationId,
+    p_name: name,
+    p_description: optionalStr(formData, "description"),
+    p_start_date: optionalStr(formData, "start_date"),
+    p_target_date: optionalStr(formData, "target_date"),
+    p_playbook_id: playbookId,
+  });
   if (error) throw new Error(error.message);
-
-  if (playbookId) {
-    const { error: playbookError } = await supabase.rpc("apply_playbook_to_project", {
-      p_project_id: data.id,
-      p_playbook_id: playbookId,
-    });
-    if (playbookError) throw new Error(playbookError.message);
-  }
 
   redirect(`/projects/${data.id}`);
 }
