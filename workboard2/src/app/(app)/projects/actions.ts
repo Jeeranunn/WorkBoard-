@@ -15,13 +15,21 @@ function optionalStr(formData: FormData, key: string): string | null {
   return value === "" ? null : value;
 }
 
-export async function createProjectAction(formData: FormData) {
+export interface ProjectFormState {
+  error: string | null;
+  success?: string | null;
+}
+
+export async function createProjectAction(
+  _state: ProjectFormState,
+  formData: FormData,
+): Promise<ProjectFormState> {
   const user = await getCurrentUser();
-  if (!user) throw new Error("ต้องเข้าสู่ระบบ");
+  if (!user) return { error: "ต้องเข้าสู่ระบบ" };
 
   const organizationId = str(formData, "organization_id");
   const name = str(formData, "name");
-  if (!organizationId || !name) return;
+  if (!organizationId || !name) return { error: "กรุณาเลือกองค์กรและใส่ชื่อโครงการ" };
 
   const supabase = await createClient();
   const playbookId = optionalStr(formData, "playbook_id");
@@ -34,24 +42,29 @@ export async function createProjectAction(formData: FormData) {
     p_target_date: optionalStr(formData, "target_date"),
     p_playbook_id: playbookId,
   });
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message };
 
   redirect(`/projects/${data.id}`);
 }
 
-export async function applyPlaybookAction(formData: FormData) {
+export async function applyPlaybookAction(
+  _state: ProjectFormState,
+  formData: FormData,
+): Promise<ProjectFormState> {
   const projectId = str(formData, "project_id");
   const playbookId = str(formData, "playbook_id");
-  if (!projectId || !playbookId) return;
+  if (!projectId || !playbookId) return { error: "กรุณาเลือกร่างมาตรฐาน" };
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("apply_playbook_to_project", {
     p_project_id: projectId,
     p_playbook_id: playbookId,
   });
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message };
 
   revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/head");
+  return { error: null, success: "เพิ่มงานจากร่างมาตรฐานแล้ว" };
 }
 
 
