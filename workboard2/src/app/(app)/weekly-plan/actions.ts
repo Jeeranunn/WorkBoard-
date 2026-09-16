@@ -175,3 +175,24 @@ export async function respondSuggestionAction(
     success: status === "accepted" ? "รับคำแนะนำแล้ว" : "ปฏิเสธคำแนะนำแล้ว",
   };
 }
+
+
+export async function applySuggestionAction(
+  _state: PlannerFormState,
+  formData: FormData,
+): Promise<PlannerFormState> {
+  const suggestionId = value(formData, "suggestion_id");
+  if (!suggestionId) return { error: "ไม่พบคำแนะนำ" };
+
+  await requireUser();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("apply_accepted_suggestion", {
+    p_suggestion_id: suggestionId,
+  });
+
+  if (error) return { error: error.message };
+
+  refreshPlanner();
+  revalidatePath("/member");
+  return { error: null, success: "นำคำแนะนำไปใช้กับ Priority ของงานแล้ว" };
+}
