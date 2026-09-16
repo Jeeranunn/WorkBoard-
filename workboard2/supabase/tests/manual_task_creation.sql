@@ -56,7 +56,7 @@ end;
 $$;
 
 -- MEMBER-A cannot nominate reviewer/approver directly.
-do $
+do $$
 begin
   perform create_manual_task(
     '50000000-0000-0000-0000-000000000001',
@@ -77,7 +77,7 @@ exception
     if sqlerrm like 'ASSERTION_FAILURE%' then raise; end if;
     raise notice 'OK: member reviewer/approver assignment blocked (%)', sqlerrm;
 end;
-$;
+$$;
 
 -- MEMBER-A cannot add work to Organization B.
 do $$
