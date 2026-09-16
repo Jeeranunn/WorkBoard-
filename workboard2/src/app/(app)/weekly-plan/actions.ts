@@ -26,6 +26,7 @@ export async function addPersonalItemAction(
   formData: FormData,
 ): Promise<PlannerFormState> {
   const title = value(formData, "title");
+  const notes = value(formData, "notes");
   const deadline = value(formData, "deadline");
   const estimatedHoursRaw = value(formData, "estimated_hours");
 
@@ -44,6 +45,7 @@ export async function addPersonalItemAction(
   const { error } = await supabase.from("personal_planner_items").insert({
     person_id: user.personId,
     title,
+    notes: notes || null,
     deadline: deadline ? new Date(deadline).toISOString() : null,
     estimated_hours: estimatedHours,
     is_important: formData.get("is_important") === "on",
