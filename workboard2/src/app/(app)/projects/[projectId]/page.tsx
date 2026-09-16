@@ -11,6 +11,7 @@ import { TASK_STATUS_LABELS } from "@/lib/task-labels";
 import { checkProjectCompleteness } from "@/lib/project-completeness";
 import { applyPlaybookAction } from "../actions";
 import { ManualTaskForm } from "./manual-task-form";
+import { ProjectActionForm } from "@/components/projects/action-form";
 
 export default async function ProjectDetailPage(
   props: PageProps<"/projects/[projectId]">,
@@ -279,13 +280,17 @@ export default async function ProjectDetailPage(
               <h2 className="mb-3 text-sm font-semibold">ใช้ Playbook</h2>
               <div className="space-y-2">
                 {(playbooks ?? []).map((pb) => (
-                  <form key={pb.id} action={applyPlaybookAction}>
+                  <ProjectActionForm
+                    key={pb.id}
+                    action={applyPlaybookAction}
+                    submitLabel={pb.name}
+                    pendingLabel="กำลังเพิ่ม..."
+                    className="space-y-1"
+                    buttonClassName="w-full rounded-md border border-slate-300 px-3 py-1.5 text-left text-sm hover:bg-slate-50 disabled:opacity-60"
+                  >
                     <input type="hidden" name="project_id" value={project.id} />
                     <input type="hidden" name="playbook_id" value={pb.id} />
-                    <button className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-left text-sm hover:bg-slate-50">
-                      {pb.name}
-                    </button>
-                  </form>
+                  </ProjectActionForm>
                 ))}
               </div>
               <p className="mt-2 text-xs text-slate-400">
