@@ -13,6 +13,11 @@ function optionalStr(formData: FormData, key: string): string | null {
   return value === "" ? null : value;
 }
 
+export interface WorkflowFormState {
+  error: string | null;
+  success?: string | null;
+}
+
 async function callTaskRpc(
   taskId: string,
   fn:
@@ -26,68 +31,100 @@ async function callTaskRpc(
     | "approve_task"
     | "complete_task",
   args: Record<string, unknown>,
-) {
+): Promise<WorkflowFormState> {
   const supabase = await createClient();
   const { error } = await supabase.rpc(fn, args as never);
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message };
+
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/my-work");
+  revalidatePath("/member");
+  revalidatePath("/head");
+  revalidatePath("/overview");
+  return { error: null };
 }
 
-export async function acknowledgeTaskAction(formData: FormData) {
+export async function acknowledgeTaskAction(
+  _state: WorkflowFormState,
+  formData: FormData,
+): Promise<WorkflowFormState> {
   const taskId = str(formData, "task_id");
-  await callTaskRpc(taskId, "acknowledge_task", { p_task_id: taskId });
+  return callTaskRpc(taskId, "acknowledge_task", { p_task_id: taskId });
 }
 
-export async function startTaskAction(formData: FormData) {
+export async function startTaskAction(
+  _state: WorkflowFormState,
+  formData: FormData,
+): Promise<WorkflowFormState> {
   const taskId = str(formData, "task_id");
-  await callTaskRpc(taskId, "start_task", { p_task_id: taskId });
+  return callTaskRpc(taskId, "start_task", { p_task_id: taskId });
 }
 
-export async function submitTaskAction(formData: FormData) {
+export async function submitTaskAction(
+  _state: WorkflowFormState,
+  formData: FormData,
+): Promise<WorkflowFormState> {
   const taskId = str(formData, "task_id");
-  await callTaskRpc(taskId, "submit_task", {
+  return callTaskRpc(taskId, "submit_task", {
     p_task_id: taskId,
     p_message: optionalStr(formData, "message"),
     p_link: optionalStr(formData, "link"),
   });
 }
 
-export async function beginReviewAction(formData: FormData) {
+export async function beginReviewAction(
+  _state: WorkflowFormState,
+  formData: FormData,
+): Promise<WorkflowFormState> {
   const taskId = str(formData, "task_id");
-  await callTaskRpc(taskId, "begin_review", { p_task_id: taskId });
+  return callTaskRpc(taskId, "begin_review", { p_task_id: taskId });
 }
 
-export async function requestRevisionAction(formData: FormData) {
+export async function requestRevisionAction(
+  _state: WorkflowFormState,
+  formData: FormData,
+): Promise<WorkflowFormState> {
   const taskId = str(formData, "task_id");
-  await callTaskRpc(taskId, "request_revision", {
+  return callTaskRpc(taskId, "request_revision", {
     p_task_id: taskId,
     p_note: optionalStr(formData, "note"),
   });
 }
 
-export async function resubmitTaskAction(formData: FormData) {
+export async function resubmitTaskAction(
+  _state: WorkflowFormState,
+  formData: FormData,
+): Promise<WorkflowFormState> {
   const taskId = str(formData, "task_id");
-  await callTaskRpc(taskId, "resubmit_task", {
+  return callTaskRpc(taskId, "resubmit_task", {
     p_task_id: taskId,
     p_message: optionalStr(formData, "message"),
     p_link: optionalStr(formData, "link"),
   });
 }
 
-export async function submitForApprovalAction(formData: FormData) {
+export async function submitForApprovalAction(
+  _state: WorkflowFormState,
+  formData: FormData,
+): Promise<WorkflowFormState> {
   const taskId = str(formData, "task_id");
-  await callTaskRpc(taskId, "submit_for_approval", { p_task_id: taskId });
+  return callTaskRpc(taskId, "submit_for_approval", { p_task_id: taskId });
 }
 
-export async function approveTaskAction(formData: FormData) {
+export async function approveTaskAction(
+  _state: WorkflowFormState,
+  formData: FormData,
+): Promise<WorkflowFormState> {
   const taskId = str(formData, "task_id");
-  await callTaskRpc(taskId, "approve_task", { p_task_id: taskId });
+  return callTaskRpc(taskId, "approve_task", { p_task_id: taskId });
 }
 
-export async function completeTaskAction(formData: FormData) {
+export async function completeTaskAction(
+  _state: WorkflowFormState,
+  formData: FormData,
+): Promise<WorkflowFormState> {
   const taskId = str(formData, "task_id");
-  await callTaskRpc(taskId, "complete_task", { p_task_id: taskId });
+  return callTaskRpc(taskId, "complete_task", { p_task_id: taskId });
 }
 
 // Timer actions are wired through useActionState (see
