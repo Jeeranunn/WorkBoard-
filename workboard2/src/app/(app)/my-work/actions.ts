@@ -24,6 +24,8 @@ export async function clockInAction(
   _state: AttendanceFormState,
   _formData: FormData,
 ): Promise<AttendanceFormState> {
+  void _state;
+  void _formData;
   return callAttendanceRpc("clock_in");
 }
 
@@ -31,6 +33,8 @@ export async function startBreakAction(
   _state: AttendanceFormState,
   _formData: FormData,
 ): Promise<AttendanceFormState> {
+  void _state;
+  void _formData;
   return callAttendanceRpc("start_break");
 }
 
@@ -38,6 +42,8 @@ export async function resumeFromBreakAction(
   _state: AttendanceFormState,
   _formData: FormData,
 ): Promise<AttendanceFormState> {
+  void _state;
+  void _formData;
   return callAttendanceRpc("resume_from_break");
 }
 
@@ -45,5 +51,7 @@ export async function clockOutAction(
   _state: AttendanceFormState,
   _formData: FormData,
 ): Promise<AttendanceFormState> {
+  void _state;
+  void _formData;
   return callAttendanceRpc("clock_out");
 }
