@@ -15,6 +15,8 @@ import {
 } from "./actions";
 import { pauseTaskTimerAction } from "../tasks/actions";
 import { TimerActionForm } from "@/components/tasks/timer-action-form";
+import { AttendanceActionForm } from "@/components/time/attendance-action-form";
+import { LiveElapsedTime } from "@/components/time/live-elapsed-time";
 
 function formatTime(value: string): string {
   return new Date(value).toLocaleString("th-TH", {
@@ -189,45 +191,58 @@ export default async function MyWorkPage() {
         </div>
         <div className="flex gap-2">
           {!attendanceSession && (
-            <form action={clockInAction}>
-              <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
-                Clock In
-              </button>
-            </form>
+            <AttendanceActionForm
+              action={clockInAction}
+              label="Clock In"
+              pendingLabel="กำลังเข้างาน..."
+              buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+            />
           )}
           {attendanceSession && !activeBreak && (
-            <form action={startBreakAction}>
-              <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
-                พัก
-              </button>
-            </form>
+            <AttendanceActionForm
+              action={startBreakAction}
+              label="พัก"
+              pendingLabel="กำลังพัก..."
+              buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            />
           )}
           {attendanceSession && activeBreak && (
-            <form action={resumeFromBreakAction}>
-              <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
-                กลับมาทำงาน
-              </button>
-            </form>
+            <AttendanceActionForm
+              action={resumeFromBreakAction}
+              label="กลับมาทำงาน"
+              pendingLabel="กำลังกลับมาทำงาน..."
+              buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+            />
           )}
           {attendanceSession && (
-            <form action={clockOutAction}>
-              <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
-                Clock Out
-              </button>
-            </form>
+            <AttendanceActionForm
+              action={clockOutAction}
+              label="Clock Out"
+              pendingLabel="กำลังออกงาน..."
+              buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            />
           )}
         </div>
       </section>
 
       {activeTimer && activeTimerTask && (
         <section className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm">
-          <span>
-            กำลังทำงาน:{" "}
-            <Link href={`/tasks/${activeTimerTask.id}`} className="font-medium hover:underline">
-              {activeTimerTask.title}
-            </Link>{" "}
-            (เริ่มเมื่อ {formatTime(activeTimer.started_at)})
-          </span>
+          <div>
+            <div>
+              กำลังทำงาน:{" "}
+              <Link href={`/tasks/${activeTimerTask.id}`} className="font-medium hover:underline">
+                {activeTimerTask.title}
+              </Link>
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-xs text-emerald-700">
+              <span>ใช้เวลาแล้ว</span>
+              <LiveElapsedTime
+                startedAt={activeTimer.started_at}
+                className="font-mono text-base font-semibold tabular-nums"
+              />
+              <span className="text-slate-500">· เริ่ม {formatTime(activeTimer.started_at)}</span>
+            </div>
+          </div>
           <TimerActionForm
             action={pauseTaskTimerAction}
             taskId={activeTimerTask.id}
