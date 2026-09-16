@@ -215,12 +215,20 @@ export default async function HeadWorkspacePage() {
             แสดงเฉพาะองค์กรที่คุณได้รับบทบาทหัวหน้าฝ่าย
           </p>
         </div>
-        <Link
-          href="/head/capacity"
-          className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
-        >
-          ดู Capacity ทีม
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/management-board"
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+          >
+            บอร์ดบริหาร
+          </Link>
+          <Link
+            href="/head/capacity"
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            ดู Capacity ทีม
+          </Link>
+        </div>
       </header>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
