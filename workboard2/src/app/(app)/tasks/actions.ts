@@ -188,14 +188,22 @@ export async function pauseTaskTimerAction(
   return initialTimerFormState;
 }
 
-export async function addCommentAction(formData: FormData) {
+export interface CommentFormState {
+  error: string | null;
+  success?: string | null;
+}
+
+export async function addCommentAction(
+  _state: CommentFormState,
+  formData: FormData,
+): Promise<CommentFormState> {
   const taskId = str(formData, "task_id");
   const body = str(formData, "body");
-  if (!body) return;
+  if (!taskId || !body) return { error: "กรุณาเขียนความคิดเห็นหรือคำถาม" };
   const isQuestion = formData.get("is_question") === "on";
 
   const user = await getCurrentUser();
-  if (!user) throw new Error("ต้องเข้าสู่ระบบ");
+  if (!user) return { error: "ต้องเข้าสู่ระบบ" };
 
   const supabase = await createClient();
   const { error } = await supabase.from("task_comments").insert({
@@ -204,6 +212,8 @@ export async function addCommentAction(formData: FormData) {
     body,
     is_question: isQuestion,
   });
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message };
+
   revalidatePath(`/tasks/${taskId}`);
+  return { error: null, success: "ส่งความคิดเห็นแล้ว" };
 }
