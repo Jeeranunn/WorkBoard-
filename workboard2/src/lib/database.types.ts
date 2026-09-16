@@ -823,6 +823,84 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["planned_slots"]["Insert"]>;
         Relationships: [];
       };
+      learning_reflections: {
+        Row: {
+          id: string; person_id: string; meeting_name: string; meeting_date: string;
+          note: string; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; person_id: string; meeting_name: string; meeting_date: string;
+          note: string; created_at?: string; updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["learning_reflections"]["Insert"]>;
+        Relationships: [];
+      };
+      executive_questions: {
+        Row: {
+          id: string; sender_person_id: string; recipient_person_id: string | null;
+          question: string; status: "OPEN" | "ANSWERED" | "WITHDRAWN";
+          withdrawn_at: string | null; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; sender_person_id: string; recipient_person_id?: string | null;
+          question: string; status?: "OPEN" | "ANSWERED" | "WITHDRAWN";
+          withdrawn_at?: string | null; created_at?: string; updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["executive_questions"]["Insert"]>;
+        Relationships: [];
+      };
+      executive_question_replies: {
+        Row: {
+          id: string; question_id: string; author_person_id: string;
+          body: string; created_at: string;
+        };
+        Insert: {
+          id?: string; question_id: string; author_person_id: string;
+          body: string; created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["executive_question_replies"]["Insert"]>;
+        Relationships: [];
+      };
+      meeting_requests: {
+        Row: {
+          id: string; sender_person_id: string; recipient_person_id: string | null;
+          topic: string; requested_start: string; duration_minutes: number;
+          location: string | null;
+          status: "PENDING" | "ACCEPTED" | "DECLINED" | "RESCHEDULE_PROPOSED" | "CANCELLED";
+          executive_remark: string | null; proposed_start: string | null;
+          proposed_location: string | null; responded_at: string | null;
+          cancelled_at: string | null; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; sender_person_id: string; recipient_person_id?: string | null;
+          topic: string; requested_start: string; duration_minutes?: number;
+          location?: string | null;
+          status?: "PENDING" | "ACCEPTED" | "DECLINED" | "RESCHEDULE_PROPOSED" | "CANCELLED";
+          executive_remark?: string | null; proposed_start?: string | null;
+          proposed_location?: string | null; responded_at?: string | null;
+          cancelled_at?: string | null; created_at?: string; updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meeting_requests"]["Insert"]>;
+        Relationships: [];
+      };
+      management_memos: {
+        Row: {
+          id: string; sender_person_id: string; subject: string; body: string | null;
+          link: string | null; withdrawn_at: string | null; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; sender_person_id: string; subject: string; body?: string | null;
+          link?: string | null; withdrawn_at?: string | null; created_at?: string; updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["management_memos"]["Insert"]>;
+        Relationships: [];
+      };
+      management_memo_recipients: {
+        Row: { memo_id: string; recipient_person_id: string; acknowledged_at: string | null; };
+        Insert: { memo_id: string; recipient_person_id: string; acknowledged_at?: string | null; };
+        Update: Partial<Database["public"]["Tables"]["management_memo_recipients"]["Insert"]>;
+        Relationships: [];
+      };
       suggestions: {
         Row: {
           id: string;
@@ -854,6 +932,53 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      send_executive_question: {
+        Args: { p_question: string; p_recipient_person_id?: string | null };
+        Returns: Database["public"]["Tables"]["executive_questions"]["Row"];
+      };
+      reply_executive_question: {
+        Args: { p_question_id: string; p_body: string };
+        Returns: Database["public"]["Tables"]["executive_question_replies"]["Row"];
+      };
+      withdraw_executive_question: {
+        Args: { p_question_id: string };
+        Returns: Database["public"]["Tables"]["executive_questions"]["Row"];
+      };
+      create_meeting_request: {
+        Args: {
+          p_topic: string; p_requested_start: string; p_duration_minutes: number;
+          p_location?: string | null; p_recipient_person_id?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["meeting_requests"]["Row"];
+      };
+      respond_meeting_request: {
+        Args: {
+          p_request_id: string;
+          p_status: "PENDING" | "ACCEPTED" | "DECLINED" | "RESCHEDULE_PROPOSED" | "CANCELLED";
+          p_remark?: string | null; p_proposed_start?: string | null; p_proposed_location?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["meeting_requests"]["Row"];
+      };
+      confirm_meeting_reschedule: {
+        Args: { p_request_id: string };
+        Returns: Database["public"]["Tables"]["meeting_requests"]["Row"];
+      };
+      cancel_meeting_request: {
+        Args: { p_request_id: string };
+        Returns: Database["public"]["Tables"]["meeting_requests"]["Row"];
+      };
+      send_management_memo: {
+        Args: { p_subject: string; p_body?: string | null; p_link?: string | null };
+        Returns: Database["public"]["Tables"]["management_memos"]["Row"];
+      };
+      acknowledge_management_memo: {
+        Args: { p_memo_id: string };
+        Returns: undefined;
+      };
+      active_executive_people: {
+        Args: Record<PropertyKey, never>;
+        Returns: string[];
+      };
       current_person_id: {
         Args: Record<string, never>;
         Returns: string;
