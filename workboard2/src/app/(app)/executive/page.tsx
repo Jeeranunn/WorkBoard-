@@ -186,6 +186,12 @@ export default async function ExecutiveDashboardPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
+            href="/management-board"
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+          >
+            บอร์ดบริหาร
+          </Link>
+          <Link
             href="/executive/capacity"
             className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
           >
