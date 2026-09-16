@@ -245,8 +245,7 @@ export default async function ExecutiveDashboardPage() {
         </div>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
-        <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <section className="max-w-2xl rounded-lg border border-slate-200 bg-white p-4">
           <h2 className="mb-1 text-sm font-semibold">เสนอปรับ Priority</h2>
           <p className="mb-3 text-xs text-slate-500">
             เป็นคำแนะนำให้ผู้รับผิดชอบพิจารณา ไม่เปลี่ยน Priority ของงานโดยอัตโนมัติ
@@ -258,10 +257,7 @@ export default async function ExecutiveDashboardPage() {
               projectName: projectNameById.get(task.project_id) ?? "-",
             }))}
           />
-        </section>
-
-
-      </div>
+      </section>
 
       <div className="grid gap-6 md:grid-cols-3">
         <section className="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
