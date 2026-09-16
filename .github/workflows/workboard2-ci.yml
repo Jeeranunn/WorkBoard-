@@ -81,6 +81,7 @@ jobs:
             admin_lifecycle.sql
             planner_crud.sql
             capacity_time_snapshot.sql
+            task_self_management.sql
           )
 
           for test_file in "${tests[@]}"; do
