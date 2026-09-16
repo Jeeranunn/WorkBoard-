@@ -52,7 +52,7 @@ export default async function ProjectDetailPage(
     { data: playbooks },
     { data: playbookTasks },
     { data: conditionalRules },
-    { data: organizationRoles },
+    { data: assignablePeople },
   ] = await Promise.all([
     supabase
       .from("organizations")
@@ -76,25 +76,17 @@ export default async function ProjectDetailPage(
     supabase.from("playbook_tasks").select("id, tag, requires_reviewer"),
     supabase.from("playbook_conditional_rules").select("if_tag, then_tag, message"),
     canManage
-      ? supabase
-          .from("person_roles")
-          .select("person_id")
-          .eq("organization_id", project.organization_id)
-          .in("role", ["HEAD", "MEMBER"])
-      : Promise.resolve({ data: [] as { person_id: string }[] }),
+      ? supabase.rpc("managed_people_in_organizations", {
+          p_organization_ids: [project.organization_id],
+        })
+      : Promise.resolve({
+          data: [] as {
+            person_id: string;
+            full_name: string;
+            organization_id: string;
+          }[],
+        }),
   ]);
-
-  const managerPersonIds = [
-    ...new Set((organizationRoles ?? []).map((row) => row.person_id)),
-  ];
-  const { data: managerPeople } =
-    canManage && managerPersonIds.length
-      ? await supabase
-          .from("people")
-          .select("id, full_name")
-          .in("id", managerPersonIds)
-          .order("full_name")
-      : { data: [] as { id: string; full_name: string }[] };
 
   const holderIds = [
     ...new Set(
@@ -181,8 +173,8 @@ export default async function ProjectDetailPage(
                   id: item.id,
                   name: item.name,
                 }))}
-                people={(managerPeople ?? []).map((person) => ({
-                  id: person.id,
+                people={(assignablePeople ?? []).map((person) => ({
+                  id: person.person_id,
                   name: person.full_name,
                 }))}
                 canAssignOthers={canManage}
