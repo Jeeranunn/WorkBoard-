@@ -1018,6 +1018,17 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["tasks"]["Row"];
       };
+      create_project_with_optional_playbook: {
+        Args: {
+          p_organization_id: string;
+          p_name: string;
+          p_description?: string | null;
+          p_start_date?: string | null;
+          p_target_date?: string | null;
+          p_playbook_id?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["projects"]["Row"];
+      };
     };
     Enums: {
       app_role: AppRole;
