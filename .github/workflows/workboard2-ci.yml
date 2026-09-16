@@ -80,6 +80,7 @@ jobs:
             management_assignment_integrity.sql
             admin_lifecycle.sql
             planner_crud.sql
+            capacity_time_snapshot.sql
           )
 
           for test_file in "${tests[@]}"; do
