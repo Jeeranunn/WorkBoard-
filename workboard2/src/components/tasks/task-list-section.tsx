@@ -1,3 +1,4 @@
+import { formatThaiDateTime } from "@/lib/date-time";
 import Link from "next/link";
 import type { PriorityLevel, TaskStatus } from "@/lib/database.types";
 import { TASK_STATUS_LABELS } from "@/lib/task-labels";
@@ -19,16 +20,6 @@ const PRIORITY_STYLES: Record<PriorityLevel, string> = {
   P3: "bg-sky-100 text-sky-700",
   P4: "bg-slate-100 text-slate-600",
 };
-
-function formatDeadline(deadline: string | null): string {
-  if (!deadline) return "-";
-  return new Date(deadline).toLocaleString("th-TH", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export function TaskListSection({
   title,
@@ -63,7 +54,7 @@ export function TaskListSection({
                 <div className="text-xs text-slate-400">{t.projectName}</div>
               </td>
               <td className="px-4 py-2 text-xs text-slate-500">
-                {formatDeadline(t.deadline)}
+                {formatThaiDateTime(t.deadline)}
               </td>
               <td className="px-4 py-2">
                 <span
