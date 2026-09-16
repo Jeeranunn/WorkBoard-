@@ -1002,6 +1002,22 @@ export interface Database {
         Args: { p_suggestion_id: string; p_status: string };
         Returns: Database["public"]["Tables"]["suggestions"]["Row"];
       };
+      create_manual_task: {
+        Args: {
+          p_project_id: string;
+          p_title: string;
+          p_description?: string | null;
+          p_workstream_id?: string | null;
+          p_assignee_person_id?: string | null;
+          p_reviewer_person_id?: string | null;
+          p_approver_person_id?: string | null;
+          p_deadline?: string | null;
+          p_estimated_hours?: number | null;
+          p_is_important?: boolean;
+          p_is_urgent?: boolean;
+        };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
     };
     Enums: {
       app_role: AppRole;
