@@ -3,7 +3,6 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { timed } from "@/lib/server-timing";
 import type { AppRole } from "@/lib/database.types";
-import { bangkokTodayKey } from "@/lib/date-time";
 
 export interface RoleGrant {
   role: AppRole;
@@ -51,35 +50,54 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   const supabase = await createClient();
 
-  const { data: person } = await timed("people lookup (query)", () =>
-    supabase
-      .from("people")
-      .select("id, full_name, email")
-      .eq("auth_user_id", user.id)
-      .maybeSingle(),
+  const { data } = await timed("current_user_context (query)", () =>
+    supabase.rpc("current_user_context"),
   );
 
-  if (!person) return null;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
 
-  const today = bangkokTodayKey();
+  const raw = data as {
+    person_id?: unknown;
+    full_name?: unknown;
+    email?: unknown;
+    roles?: unknown;
+  };
 
-  const { data: roleRows } = await timed("person_roles lookup (query)", () =>
-    supabase
-      .from("person_roles")
-      .select("role, organization_id")
-      .eq("person_id", person.id)
-      .lte("valid_from", today)
-      .or(`valid_to.is.null,valid_to.gte.${today}`),
-  );
+  if (
+    typeof raw.person_id !== "string" ||
+    typeof raw.full_name !== "string" ||
+    typeof raw.email !== "string"
+  ) {
+    return null;
+  }
+
+  const roles = Array.isArray(raw.roles)
+    ? raw.roles.flatMap((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+        const role = (item as { role?: unknown }).role;
+        const organizationId = (item as { organization_id?: unknown }).organization_id;
+
+        if (
+          !["ADMIN", "EXECUTIVE", "HEAD", "MEMBER"].includes(String(role)) ||
+          !(organizationId === null || typeof organizationId === "string")
+        ) {
+          return [];
+        }
+
+        return [
+          {
+            role: String(role) as AppRole,
+            organizationId: organizationId as string | null,
+          },
+        ];
+      })
+    : [];
 
   return {
-    personId: person.id,
-    fullName: person.full_name,
-    email: person.email,
-    roles: (roleRows ?? []).map((r) => ({
-      role: r.role,
-      organizationId: r.organization_id,
-    })),
+    personId: raw.person_id,
+    fullName: raw.full_name,
+    email: raw.email,
+    roles,
   };
 });
 
