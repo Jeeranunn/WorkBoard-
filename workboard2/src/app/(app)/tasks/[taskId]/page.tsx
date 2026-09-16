@@ -177,6 +177,7 @@ export default async function TaskDetailPage(
     hasRole(user, "ADMIN") ||
     task.assignee_person_id === user.personId ||
     hasRoleInOrganization(user, "HEAD", project.organization_id);
+  const canTrackOwnTime = task.assignee_person_id === user.personId;
 
   const isHolderSide =
     hasRole(user, "ADMIN") ||
@@ -441,7 +442,7 @@ export default async function TaskDetailPage(
             )}
           </section>
 
-          {isAssigneeSide && (
+          {canTrackOwnTime && (
             <section className="rounded-lg border border-slate-200 bg-white p-4">
               <h2 className="mb-2 text-sm font-semibold">เวลาในงานนี้</h2>
               {myActiveTimer?.task_id === task.id ? (
