@@ -9,6 +9,7 @@ import {
 } from "@/lib/project-labels";
 import { ACTIVE_TASK_STATUSES } from "@/lib/task-labels";
 import type { ProjectHealth } from "@/lib/database.types";
+import { PrioritySuggestionForm } from "@/components/executive/priority-suggestion-form";
 
 // The one genuinely sequential query on this page — it needs topHolderIds,
 // computed from the tasks already fetched above — so it's the one part of
@@ -243,6 +244,24 @@ export default async function ExecutiveDashboardPage() {
           />
         </div>
       </section>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
+        <section className="rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="mb-1 text-sm font-semibold">เสนอปรับ Priority</h2>
+          <p className="mb-3 text-xs text-slate-500">
+            เป็นคำแนะนำให้ผู้รับผิดชอบพิจารณา ไม่เปลี่ยน Priority ของงานโดยอัตโนมัติ
+          </p>
+          <PrioritySuggestionForm
+            tasks={activeTasks.map((task) => ({
+              id: task.id,
+              title: task.title,
+              projectName: projectNameById.get(task.project_id) ?? "-",
+            }))}
+          />
+        </section>
+
+
+      </div>
 
       <div className="grid gap-6 md:grid-cols-3">
         <section className="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
