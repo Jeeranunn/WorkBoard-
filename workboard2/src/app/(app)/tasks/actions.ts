@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
+import { bangkokLocalDateTimeToIso } from "@/lib/date-time";
 
 function str(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -216,4 +217,104 @@ export async function addCommentAction(
 
   revalidatePath(`/tasks/${taskId}`);
   return { error: null, success: "ส่งความคิดเห็นแล้ว" };
+}
+
+
+export interface TaskEditFormState {
+  error: string | null;
+  success?: string | null;
+}
+
+export async function updateTaskPriorityAction(
+  _state: TaskEditFormState,
+  formData: FormData,
+): Promise<TaskEditFormState> {
+  const taskId = str(formData, "task_id");
+  if (!taskId) return { error: "ไม่พบงาน" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_task_priority", {
+    p_task_id: taskId,
+    p_is_important: formData.get("is_important") === "on",
+    p_is_urgent: formData.get("is_urgent") === "on",
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath("/my-work");
+  revalidatePath("/member");
+  revalidatePath("/overview");
+  revalidatePath("/head");
+  revalidatePath("/executive");
+  return { error: null, success: "อัปเดต Priority แล้ว" };
+}
+
+export async function updateManualTaskDetailsAction(
+  _state: TaskEditFormState,
+  formData: FormData,
+): Promise<TaskEditFormState> {
+  const taskId = str(formData, "task_id");
+  const title = str(formData, "title");
+  const description = str(formData, "description");
+  const deadlineRaw = str(formData, "deadline");
+  const estimatedRaw = str(formData, "estimated_hours");
+
+  if (!taskId || !title) return { error: "กรุณาใส่ชื่องาน" };
+
+  const estimated = estimatedRaw ? Number(estimatedRaw) : null;
+  if (estimated !== null && (!Number.isFinite(estimated) || estimated <= 0)) {
+    return { error: "ชั่วโมงโดยประมาณต้องมากกว่า 0" };
+  }
+
+  let deadline: string | null = null;
+  try {
+    deadline = deadlineRaw ? bangkokLocalDateTimeToIso(deadlineRaw) : null;
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "วันเวลาไม่ถูกต้อง" };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_manual_task_details", {
+    p_task_id: taskId,
+    p_title: title,
+    p_description: description || null,
+    p_deadline: deadline,
+    p_estimated_hours: estimated,
+    p_is_important: formData.get("is_important") === "on",
+    p_is_urgent: formData.get("is_urgent") === "on",
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath("/my-work");
+  revalidatePath("/member");
+  revalidatePath("/overview");
+  revalidatePath("/head");
+  revalidatePath("/executive");
+  return { error: null, success: "แก้ไขงานแล้ว" };
+}
+
+export async function cancelTaskAction(
+  _state: TaskEditFormState,
+  formData: FormData,
+): Promise<TaskEditFormState> {
+  const taskId = str(formData, "task_id");
+  if (!taskId) return { error: "ไม่พบงาน" };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("cancel_task_from_active_work", {
+    p_task_id: taskId,
+  });
+
+  if (error) return { error: error.message };
+
+  revalidatePath(`/tasks/${taskId}`);
+  revalidatePath("/my-work");
+  revalidatePath("/member");
+  revalidatePath("/overview");
+  revalidatePath("/head");
+  revalidatePath("/executive");
+  return { error: null, success: "นำงานออกจากงานที่ใช้งานแล้ว และเก็บประวัติไว้" };
 }
