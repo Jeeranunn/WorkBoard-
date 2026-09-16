@@ -207,12 +207,20 @@ export default async function HeadWorkspacePage() {
 
   return (
     <div className="space-y-7">
-      <header>
-        <p className="text-sm text-slate-500">พื้นที่หัวหน้าฝ่าย</p>
-        <h1 className="mt-1 text-2xl font-semibold">ดูทีมและงานที่ต้องจัดการ</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          แสดงเฉพาะองค์กรที่คุณได้รับบทบาทหัวหน้าฝ่าย
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-sm text-slate-500">พื้นที่หัวหน้าฝ่าย</p>
+          <h1 className="mt-1 text-2xl font-semibold">ดูทีมและงานที่ต้องจัดการ</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            แสดงเฉพาะองค์กรที่คุณได้รับบทบาทหัวหน้าฝ่าย
+          </p>
+        </div>
+        <Link
+          href="/head/capacity"
+          className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+        >
+          ดู Capacity ทีม
+        </Link>
       </header>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
