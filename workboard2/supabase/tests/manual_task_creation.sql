@@ -55,6 +55,30 @@ exception
 end;
 $$;
 
+-- MEMBER-A cannot nominate reviewer/approver directly.
+do $
+begin
+  perform create_manual_task(
+    '50000000-0000-0000-0000-000000000001',
+    'ห้ามตั้งผู้ตรวจเอง',
+    null,
+    null,
+    null,
+    '20000000-0000-0000-0000-000000000003',
+    null,
+    null,
+    null,
+    true,
+    false
+  );
+  raise exception 'ASSERTION_FAILURE: MEMBER-A must not assign reviewer on self-created work';
+exception
+  when others then
+    if sqlerrm like 'ASSERTION_FAILURE%' then raise; end if;
+    raise notice 'OK: member reviewer/approver assignment blocked (%)', sqlerrm;
+end;
+$;
+
 -- MEMBER-A cannot add work to Organization B.
 do $$
 begin
