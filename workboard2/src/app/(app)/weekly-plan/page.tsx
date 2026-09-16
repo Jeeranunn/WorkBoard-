@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import { ACTIVE_TASK_STATUSES } from "@/lib/task-labels";
 import { PlannerActionForm } from "@/components/planner/action-form";
+import { bangkokTodayKey, bangkokWeekDateKeys, formatThaiDate } from "@/lib/date-time";
 import {
   addAvailabilityAction,
   addPersonalItemAction,
@@ -10,27 +11,6 @@ import {
   respondSuggestionAction,
   togglePersonalItemAction,
 } from "./actions";
-
-function localDateKey(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function weekDays(reference = new Date()) {
-  const start = new Date(reference);
-  const day = start.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  start.setDate(start.getDate() + diff);
-  start.setHours(0, 0, 0, 0);
-
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-    return date;
-  });
-}
 
 const availabilityLabel = {
   free: "ว่าง",
@@ -42,9 +22,10 @@ export default async function WeeklyPlanPage() {
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const days = weekDays();
-  const startDate = localDateKey(days[0]);
-  const endDate = localDateKey(days[6]);
+  const dateKeys = bangkokWeekDateKeys();
+  const days = dateKeys.map((key) => new Date(`${key}T12:00:00+07:00`));
+  const startDate = dateKeys[0];
+  const endDate = dateKeys[6];
   const supabase = await createClient();
 
   const [
@@ -180,7 +161,7 @@ export default async function WeeklyPlanPage() {
       <section className="overflow-x-auto pb-2">
         <div className="grid min-w-[1050px] grid-cols-7 gap-3">
           {days.map((day) => {
-            const key = localDateKey(day);
+            const key = dateKeys[days.indexOf(day)];
             const daySlots = slotsByDate.get(key) ?? [];
             const dayAvailability = availabilityByDate.get(key) ?? [];
 
@@ -191,13 +172,10 @@ export default async function WeeklyPlanPage() {
               >
                 <div className="border-b border-slate-100 pb-2">
                   <div className="text-xs text-slate-400">
-                    {day.toLocaleDateString("th-TH", { weekday: "short" })}
+                    {formatThaiDate(day, { weekday: "short" })}
                   </div>
                   <div className="font-semibold">
-                    {day.toLocaleDateString("th-TH", {
-                      day: "numeric",
-                      month: "short",
-                    })}
+                    {formatThaiDate(day)}
                   </div>
                 </div>
 
@@ -287,7 +265,7 @@ export default async function WeeklyPlanPage() {
               required
               min={startDate}
               max={endDate}
-              defaultValue={localDateKey(new Date())}
+              defaultValue={bangkokTodayKey()}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
             <div className="grid grid-cols-2 gap-2">
@@ -322,7 +300,7 @@ export default async function WeeklyPlanPage() {
               required
               min={startDate}
               max={endDate}
-              defaultValue={localDateKey(new Date())}
+              defaultValue={bangkokTodayKey()}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
             <div className="grid grid-cols-2 gap-2">
