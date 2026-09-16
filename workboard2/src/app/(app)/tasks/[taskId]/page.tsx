@@ -4,6 +4,7 @@ import { getCurrentUser, hasRole, hasRoleInOrganization } from "@/lib/auth";
 import { TASK_STATUS_LABELS, WORK_ORIGIN_LABELS } from "@/lib/task-labels";
 import type { PriorityLevel } from "@/lib/database.types";
 import { TimerActionForm } from "@/components/tasks/timer-action-form";
+import { WorkflowActionForm } from "@/components/tasks/workflow-action-form";
 import { LiveElapsedTime } from "@/components/time/live-elapsed-time";
 import { formatThaiDateTime } from "@/lib/date-time";
 import {
@@ -328,68 +329,60 @@ export default async function TaskDetailPage(
             <h2 className="mb-3 text-sm font-semibold">การดำเนินการ</h2>
             <div className="flex flex-wrap gap-2">
               {task.status === "ASSIGNED" && isAssigneeSide && (
-                <form action={acknowledgeTaskAction}>
-                  <input type="hidden" name="task_id" value={task.id} />
+                <WorkflowActionForm action={acknowledgeTaskAction} taskId={task.id}>
                   <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                     รับทราบงาน
                   </button>
-                </form>
+                </WorkflowActionForm>
               )}
               {task.status === "ACKNOWLEDGED" && isAssigneeSide && (
-                <form action={startTaskAction}>
-                  <input type="hidden" name="task_id" value={task.id} />
+                <WorkflowActionForm action={startTaskAction} taskId={task.id}>
                   <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                     เริ่มทำงาน
                   </button>
-                </form>
+                </WorkflowActionForm>
               )}
               {(task.status === "SUBMITTED" || task.status === "RESUBMITTED") &&
                 isHolderSide && (
-                  <form action={beginReviewAction}>
-                    <input type="hidden" name="task_id" value={task.id} />
+                  <WorkflowActionForm action={beginReviewAction} taskId={task.id}>
                     <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                       เริ่มตรวจงาน
                     </button>
-                  </form>
+                  </WorkflowActionForm>
                 )}
               {task.status === "IN_REVIEW" &&
                 isHolderSide &&
                 (task.approver_person_id ? (
-                  <form action={submitForApprovalAction}>
-                    <input type="hidden" name="task_id" value={task.id} />
+                  <WorkflowActionForm action={submitForApprovalAction} taskId={task.id}>
                     <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                       ส่งต่อผู้อนุมัติ
                     </button>
-                  </form>
+                  </WorkflowActionForm>
                 ) : (
-                  <form action={approveTaskAction}>
-                    <input type="hidden" name="task_id" value={task.id} />
+                  <WorkflowActionForm action={approveTaskAction} taskId={task.id}>
                     <button className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
                       อนุมัติ
                     </button>
-                  </form>
+                  </WorkflowActionForm>
                 ))}
               {task.status === "PENDING_APPROVAL" && isHolderSide && (
-                <form action={approveTaskAction}>
-                  <input type="hidden" name="task_id" value={task.id} />
+                <WorkflowActionForm action={approveTaskAction} taskId={task.id}>
                   <button className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
                     อนุมัติ
                   </button>
-                </form>
+                </WorkflowActionForm>
               )}
               {task.status === "APPROVED" && isAssigneeSide && (
-                <form action={completeTaskAction}>
-                  <input type="hidden" name="task_id" value={task.id} />
+                <WorkflowActionForm action={completeTaskAction} taskId={task.id}>
                   <button className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
                     ปิดงาน
                   </button>
-                </form>
+                </WorkflowActionForm>
               )}
             </div>
 
             {task.status === "IN_PROGRESS" && isAssigneeSide && (
-              <form action={submitTaskAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
-                <input type="hidden" name="task_id" value={task.id} />
+              <WorkflowActionForm action={submitTaskAction} taskId={task.id} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
                 <label className="text-xs font-medium text-slate-500">ส่งงาน</label>
                 <textarea
                   name="message"
@@ -405,12 +398,11 @@ export default async function TaskDetailPage(
                 <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                   ส่งงาน
                 </button>
-              </form>
+              </WorkflowActionForm>
             )}
 
             {task.status === "REVISION_REQUIRED" && isAssigneeSide && (
-              <form action={resubmitTaskAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
-                <input type="hidden" name="task_id" value={task.id} />
+              <WorkflowActionForm action={resubmitTaskAction} taskId={task.id} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
                 <label className="text-xs font-medium text-slate-500">ส่งงานใหม่</label>
                 <textarea
                   name="message"
@@ -426,12 +418,11 @@ export default async function TaskDetailPage(
                 <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                   ส่งงานใหม่
                 </button>
-              </form>
+              </WorkflowActionForm>
             )}
 
             {task.status === "IN_REVIEW" && isHolderSide && (
-              <form action={requestRevisionAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
-                <input type="hidden" name="task_id" value={task.id} />
+              <WorkflowActionForm action={requestRevisionAction} taskId={task.id} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
                 <label className="text-xs font-medium text-slate-500">ขอให้แก้ไข</label>
                 <textarea
                   name="note"
@@ -442,7 +433,7 @@ export default async function TaskDetailPage(
                 <button className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700">
                   ขอให้แก้ไข
                 </button>
-              </form>
+              </WorkflowActionForm>
             )}
 
             {["COMPLETED", "CANCELLED"].includes(task.status) && (
