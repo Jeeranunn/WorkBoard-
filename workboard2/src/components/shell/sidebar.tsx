@@ -14,18 +14,22 @@ const memberNav: NavItem[] = [
   { href: "/my-work", label: "งานของฉัน" },
   { href: "/weekly-plan", label: "แผนรายสัปดาห์" },
   { href: "/projects", label: "โครงการ" },
+  { href: "/learning", label: "การเรียนรู้" },
+  { href: "/contact-executive", label: "ติดต่อผู้บริหาร" },
 ];
 
 const headNav: NavItem[] = [
   { href: "/head", label: "พื้นที่หัวหน้าฝ่าย" },
   { href: "/management-board", label: "บอร์ดบริหาร" },
   { href: "/head/capacity", label: "Capacity ทีม" },
+  { href: "/head/memos", label: "บันทึกถึงผู้บริหาร" },
   { href: "/projects", label: "โครงการ" },
   { href: "/teams", label: "ทีม" },
 ];
 
 const executiveNav: NavItem[] = [
   { href: "/executive", label: "ภาพรวมผู้บริหาร" },
+  { href: "/executive/inbox", label: "กล่องข้อความ" },
   { href: "/management-board", label: "บอร์ดบริหาร" },
   { href: "/executive/capacity", label: "Capacity องค์กร" },
   { href: "/projects", label: "โครงการ" },
@@ -159,7 +163,9 @@ export function Sidebar({
           items={[
             { href: "/management-board", label: "บอร์ดบริหาร" },
             { href: "/executive", label: "ภาพรวมผู้บริหาร" },
+            { href: "/executive/inbox", label: "กล่องข้อความ" },
             { href: "/head", label: "พื้นที่หัวหน้าฝ่าย" },
+            { href: "/head/memos", label: "บันทึกถึงผู้บริหาร" },
           ]}
           pathname={pathname}
           onNavigate={setNavigatingTo}
