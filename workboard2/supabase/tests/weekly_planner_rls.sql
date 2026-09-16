@@ -281,9 +281,9 @@ begin
   end if;
   raise notice 'OK: MEMBER-A accepted the suggestion; task columns remain unchanged until explicit apply';
 end;
-$;
+$$;
 
-do $
+do $$
 declare
   v_suggestion_id uuid;
 begin
@@ -306,7 +306,7 @@ begin
 
   raise notice 'OK: accepted suggestion applied explicitly and task priority flags updated';
 end;
-$;
+$$;
 
 -- Responding twice must fail (immutable once answered).
 do $$
