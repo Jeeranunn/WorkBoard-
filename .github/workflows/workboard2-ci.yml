@@ -1,0 +1,42 @@
+name: WorkBoard 2 CI
+
+on:
+  pull_request:
+    paths:
+      - "workboard2/**"
+      - ".github/workflows/workboard2-ci.yml"
+  push:
+    branches:
+      - workboard-completion-pass
+    paths:
+      - "workboard2/**"
+      - ".github/workflows/workboard2-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workboard2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workboard2/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
