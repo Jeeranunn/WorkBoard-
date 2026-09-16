@@ -69,3 +69,33 @@ export function bangkokWeekDateKeys(now = new Date()): string[] {
     ].join("-");
   });
 }
+
+
+/**
+ * Converts an HTML datetime-local value entered as Bangkok local time into
+ * an absolute ISO timestamp. Server runtimes may run in UTC, so calling
+ * new Date("YYYY-MM-DDTHH:mm") directly would interpret the same input in
+ * the server's local timezone and shift Thai deadlines by 7 hours.
+ */
+export function bangkokLocalDateTimeToIso(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) return "";
+
+  const match = normalized.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/,
+  );
+  if (!match) {
+    throw new Error("รูปแบบวันเวลาไม่ถูกต้อง");
+  }
+
+  const [, year, month, day, hour, minute, second = "00"] = match;
+  const date = new Date(
+    `${year}-${month}-${day}T${hour}:${minute}:${second}+07:00`,
+  );
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("วันเวลาไม่ถูกต้อง");
+  }
+
+  return date.toISOString();
+}
