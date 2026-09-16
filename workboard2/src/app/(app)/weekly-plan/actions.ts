@@ -198,3 +198,186 @@ export async function applySuggestionAction(
   refreshPlanner();
   return { error: null, success: "นำคำแนะนำไปใช้กับ Priority ของงานแล้ว" };
 }
+
+
+export async function updatePersonalItemAction(
+  _state: PlannerFormState,
+  formData: FormData,
+): Promise<PlannerFormState> {
+  const itemId = value(formData, "item_id");
+  const title = value(formData, "title");
+  const notes = value(formData, "notes");
+  const deadlineRaw = value(formData, "deadline");
+  const estimatedHoursRaw = value(formData, "estimated_hours");
+
+  if (!itemId || !title) return { error: "กรุณาใส่ชื่องานส่วนตัว" };
+
+  const estimatedHours = estimatedHoursRaw ? Number(estimatedHoursRaw) : null;
+  if (
+    estimatedHours !== null &&
+    (!Number.isFinite(estimatedHours) || estimatedHours <= 0)
+  ) {
+    return { error: "ชั่วโมงโดยประมาณต้องมากกว่า 0" };
+  }
+
+  let deadline: string | null = null;
+  try {
+    deadline = deadlineRaw ? bangkokLocalDateTimeToIso(deadlineRaw) : null;
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "วันเวลาไม่ถูกต้อง",
+    };
+  }
+
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("personal_planner_items")
+    .update({
+      title,
+      notes: notes || null,
+      deadline,
+      estimated_hours: estimatedHours,
+      is_important: formData.get("is_important") === "on",
+      is_urgent: formData.get("is_urgent") === "on",
+    })
+    .eq("id", itemId)
+    .eq("person_id", user.personId);
+
+  if (error) return { error: error.message };
+  refreshPlanner();
+  return { error: null, success: "แก้ไขงานส่วนตัวแล้ว" };
+}
+
+export async function deletePersonalItemAction(
+  _state: PlannerFormState,
+  formData: FormData,
+): Promise<PlannerFormState> {
+  const itemId = value(formData, "item_id");
+  if (!itemId) return { error: "ไม่พบรายการ" };
+
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("personal_planner_items")
+    .delete()
+    .eq("id", itemId)
+    .eq("person_id", user.personId);
+
+  if (error) return { error: error.message };
+  refreshPlanner();
+  return { error: null, success: "ลบงานส่วนตัวและช่วงเวลาที่ผูกไว้แล้ว" };
+}
+
+export async function updateAvailabilityAction(
+  _state: PlannerFormState,
+  formData: FormData,
+): Promise<PlannerFormState> {
+  const availabilityId = value(formData, "availability_id");
+  const date = value(formData, "date");
+  const startTime = value(formData, "start_time");
+  const endTime = value(formData, "end_time");
+  const status = value(formData, "status") as "free" | "busy" | "maybe";
+  const note = value(formData, "note");
+
+  if (!availabilityId || !date || !startTime || !endTime) {
+    return { error: "ข้อมูลช่วงเวลาไม่ครบ" };
+  }
+  if (!["free", "busy", "maybe"].includes(status)) {
+    return { error: "สถานะช่วงเวลาไม่ถูกต้อง" };
+  }
+  if (endTime <= startTime) {
+    return { error: "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม" };
+  }
+
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("availability")
+    .update({
+      date,
+      start_time: startTime,
+      end_time: endTime,
+      status,
+      note: note || null,
+    })
+    .eq("id", availabilityId)
+    .eq("person_id", user.personId);
+
+  if (error) return { error: error.message };
+  refreshPlanner();
+  return { error: null, success: "แก้ไข Availability แล้ว" };
+}
+
+export async function deleteAvailabilityAction(
+  _state: PlannerFormState,
+  formData: FormData,
+): Promise<PlannerFormState> {
+  const availabilityId = value(formData, "availability_id");
+  if (!availabilityId) return { error: "ไม่พบช่วงเวลา" };
+
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("availability")
+    .delete()
+    .eq("id", availabilityId)
+    .eq("person_id", user.personId);
+
+  if (error) return { error: error.message };
+  refreshPlanner();
+  return { error: null, success: "ลบ Availability แล้ว" };
+}
+
+export async function reschedulePlannedSlotAction(
+  _state: PlannerFormState,
+  formData: FormData,
+): Promise<PlannerFormState> {
+  const slotId = value(formData, "slot_id");
+  const date = value(formData, "date");
+  const startTime = value(formData, "start_time");
+  const endTime = value(formData, "end_time");
+
+  if (!slotId || !date || !startTime || !endTime) {
+    return { error: "ข้อมูลตารางไม่ครบ" };
+  }
+  if (endTime <= startTime) {
+    return { error: "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม" };
+  }
+
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("planned_slots")
+    .update({
+      date,
+      start_time: startTime,
+      end_time: endTime,
+    })
+    .eq("id", slotId)
+    .eq("person_id", user.personId);
+
+  if (error) return { error: error.message };
+  refreshPlanner();
+  return { error: null, success: "ย้ายช่วงเวลาแล้ว" };
+}
+
+export async function deletePlannedSlotAction(
+  _state: PlannerFormState,
+  formData: FormData,
+): Promise<PlannerFormState> {
+  const slotId = value(formData, "slot_id");
+  if (!slotId) return { error: "ไม่พบช่วงเวลา" };
+
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("planned_slots")
+    .delete()
+    .eq("id", slotId)
+    .eq("person_id", user.personId);
+
+  if (error) return { error: error.message };
+  refreshPlanner();
+  return { error: null, success: "นำออกจากตารางแล้ว" };
+}
