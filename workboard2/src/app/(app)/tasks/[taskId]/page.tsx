@@ -4,6 +4,7 @@ import { getCurrentUser, hasRole, hasRoleInOrganization } from "@/lib/auth";
 import { TASK_STATUS_LABELS, WORK_ORIGIN_LABELS } from "@/lib/task-labels";
 import type { PriorityLevel } from "@/lib/database.types";
 import { TimerActionForm } from "@/components/tasks/timer-action-form";
+import { LiveElapsedTime } from "@/components/time/live-elapsed-time";
 import {
   acknowledgeTaskAction,
   startTaskAction,
@@ -461,9 +462,19 @@ export default async function TaskDetailPage(
               <h2 className="mb-2 text-sm font-semibold">เวลาในงานนี้</h2>
               {myActiveTimer?.task_id === task.id ? (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-emerald-600">
-                    กำลังจับเวลาอยู่ (เริ่มเมื่อ {formatDateTime(myActiveTimer.started_at)})
-                  </span>
+                  <div className="text-emerald-700">
+                    <div>กำลังจับเวลาอยู่</div>
+                    <div className="mt-1 flex items-center gap-2 text-xs">
+                      <span>ใช้เวลาแล้ว</span>
+                      <LiveElapsedTime
+                        startedAt={myActiveTimer.started_at}
+                        className="font-mono text-base font-semibold tabular-nums"
+                      />
+                      <span className="text-slate-500">
+                        · เริ่ม {formatDateTime(myActiveTimer.started_at)}
+                      </span>
+                    </div>
+                  </div>
                   <TimerActionForm
                     action={pauseTaskTimerAction}
                     taskId={task.id}
