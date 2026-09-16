@@ -153,6 +153,8 @@ export async function startTaskTimerAction(
   if (error) return { error: error.message };
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/my-work");
+  revalidatePath("/member");
+  revalidatePath("/head");
   return initialTimerFormState;
 }
 
@@ -166,6 +168,8 @@ export async function switchTaskTimerAction(
   if (error) return { error: error.message };
   revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/my-work");
+  revalidatePath("/member");
+  revalidatePath("/head");
   return initialTimerFormState;
 }
 
@@ -179,6 +183,8 @@ export async function pauseTaskTimerAction(
   if (error) return { error: error.message };
   if (taskId) revalidatePath(`/tasks/${taskId}`);
   revalidatePath("/my-work");
+  revalidatePath("/member");
+  revalidatePath("/head");
   return initialTimerFormState;
 }
 
