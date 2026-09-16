@@ -103,6 +103,13 @@ export function Sidebar({
         {workNav.map((item) => (
           <NavLink key={item.href} {...item} {...navProps} />
         ))}
+        {(isHead || isAdmin || isExecutive) && (
+          <NavLink
+            href="/management-board"
+            label="บอร์ดบริหาร"
+            {...navProps}
+          />
+        )}
         {(isHead || isAdmin) && (
           <NavLink
             href="/head"
