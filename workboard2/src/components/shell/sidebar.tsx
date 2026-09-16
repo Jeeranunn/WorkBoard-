@@ -60,9 +60,11 @@ function NavLink({
 export function Sidebar({
   isAdmin,
   isExecutive,
+  isHead,
 }: {
   isAdmin: boolean;
   isExecutive: boolean;
+  isHead: boolean;
 }) {
   const pathname = usePathname();
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
@@ -99,6 +101,13 @@ export function Sidebar({
         {workNav.map((item) => (
           <NavLink key={item.href} {...item} {...navProps} />
         ))}
+        {(isHead || isAdmin) && (
+          <NavLink
+            href="/head"
+            label="พื้นที่หัวหน้าฝ่าย"
+            {...navProps}
+          />
+        )}
         {(isAdmin || isExecutive) && (
           <NavLink
             href="/executive"
