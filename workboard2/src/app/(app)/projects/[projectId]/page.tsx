@@ -73,7 +73,7 @@ export default async function ProjectDetailPage(
     canManage
       ? supabase.from("playbooks").select("id, key, name")
       : Promise.resolve({ data: [] as { id: string; key: string; name: string }[] }),
-    supabase.from("playbook_tasks").select("id, tag"),
+    supabase.from("playbook_tasks").select("id, tag, requires_reviewer"),
     supabase.from("playbook_conditional_rules").select("if_tag, then_tag, message"),
     canManage
       ? supabase
@@ -113,6 +113,20 @@ export default async function ProjectDetailPage(
       .filter((pt) => pt.tag)
       .map((pt) => [pt.id, pt.tag as string]),
   );
+  const reviewRequiredSourceIds = new Set(
+    (playbookTasks ?? [])
+      .filter((pt) => pt.requires_reviewer)
+      .map((pt) => pt.id),
+  );
+  const reviewRequiredTaskIds = new Set(
+    (tasks ?? [])
+      .filter(
+        (task) =>
+          task.source_playbook_task_id &&
+          reviewRequiredSourceIds.has(task.source_playbook_task_id),
+      )
+      .map((task) => task.id),
+  );
 
   const issues = checkProjectCompleteness({
     project: { target_date: project.target_date },
@@ -120,6 +134,7 @@ export default async function ProjectDetailPage(
     tasks: tasks ?? [],
     taskTagById,
     conditionalRules: conditionalRules ?? [],
+    reviewRequiredTaskIds,
   });
 
   const tasksByWorkstream = new Map<string | null, NonNullable<typeof tasks>>();
