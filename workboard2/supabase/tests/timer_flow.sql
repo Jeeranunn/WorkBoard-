@@ -32,7 +32,7 @@ select start_task('70000000-0000-0000-0000-000000000004');
 select acknowledge_task('70000000-0000-0000-0000-000000000003');
 select start_task('70000000-0000-0000-0000-000000000003');
 
-do $
+do $$
 begin
   perform start_task_timer('70000000-0000-0000-0000-000000000004'); -- t4, MEMBER-A's own task
   raise exception 'ASSERTION_FAILURE: starting a timer before Clock In must be rejected';
@@ -131,7 +131,7 @@ $$;
 
 select start_break();
 
-do $
+do $$
 declare
   n int;
 begin
@@ -144,7 +144,7 @@ begin
   end if;
   raise notice 'OK: start_break atomically stopped the active task timer';
 end;
-$;
+$$;
 
 do $$
 begin
