@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, hasRole } from "@/lib/auth";
 import { ACTIVE_TASK_STATUSES, TASK_STATUS_LABELS } from "@/lib/task-labels";
@@ -14,6 +15,15 @@ const ROLE_LABELS = {
 export default async function OverviewPage() {
   const user = await getCurrentUser();
   if (!user) return null;
+
+  const isElevated =
+    hasRole(user, "ADMIN") ||
+    hasRole(user, "EXECUTIVE") ||
+    user.roles.some((grant) => grant.role === "HEAD");
+
+  if (!isElevated && user.roles.some((grant) => grant.role === "MEMBER")) {
+    redirect("/member");
+  }
 
   const supabase = await createClient();
   const now = new Date().toISOString();
