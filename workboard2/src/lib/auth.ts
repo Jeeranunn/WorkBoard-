@@ -3,6 +3,7 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { timed } from "@/lib/server-timing";
 import type { AppRole } from "@/lib/database.types";
+import { bangkokTodayKey } from "@/lib/date-time";
 
 export interface RoleGrant {
   role: AppRole;
@@ -60,13 +61,15 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   if (!person) return null;
 
+  const today = bangkokTodayKey();
+
   const { data: roleRows } = await timed("person_roles lookup (query)", () =>
     supabase
       .from("person_roles")
       .select("role, organization_id")
       .eq("person_id", person.id)
-      .lte("valid_from", new Date().toISOString().slice(0, 10))
-      .or(`valid_to.is.null,valid_to.gte.${new Date().toISOString().slice(0, 10)}`),
+      .lte("valid_from", today)
+      .or(`valid_to.is.null,valid_to.gte.${today}`),
   );
 
   return {
