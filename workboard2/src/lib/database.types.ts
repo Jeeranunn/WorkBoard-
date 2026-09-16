@@ -830,6 +830,7 @@ export interface Database {
           status: "pending" | "accepted" | "rejected";
           created_at: string;
           responded_at: string | null;
+          applied_at: string | null;
         };
         Insert: {
           id?: string;
@@ -841,6 +842,7 @@ export interface Database {
           status?: "pending" | "accepted" | "rejected";
           created_at?: string;
           responded_at?: string | null;
+          applied_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["suggestions"]["Insert"]>;
         Relationships: [];
@@ -1044,6 +1046,10 @@ export interface Database {
           p_reviewer_person_id?: string | null;
           p_approver_person_id?: string | null;
         };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      apply_accepted_suggestion: {
+        Args: { p_suggestion_id: string };
         Returns: Database["public"]["Tables"]["tasks"]["Row"];
       };
     };
