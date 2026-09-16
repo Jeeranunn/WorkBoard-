@@ -1081,6 +1081,30 @@ export interface Database {
         Args: Record<PropertyKey, never>;
         Returns: Json | null;
       };
+      update_task_priority: {
+        Args: {
+          p_task_id: string;
+          p_is_important: boolean;
+          p_is_urgent: boolean;
+        };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      update_manual_task_details: {
+        Args: {
+          p_task_id: string;
+          p_title: string;
+          p_description?: string | null;
+          p_deadline?: string | null;
+          p_estimated_hours?: number | null;
+          p_is_important?: boolean;
+          p_is_urgent?: boolean;
+        };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      cancel_task_from_active_work: {
+        Args: { p_task_id: string };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
     };
     Enums: {
       app_role: AppRole;
