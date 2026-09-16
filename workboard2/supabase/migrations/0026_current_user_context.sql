@@ -32,7 +32,7 @@ as $$
             from person_roles pr
             where pr.person_id = p.id
               and pr.valid_from <= current_date
-              and (pr.valid_to is null or pr.valid_to >= current_date)
+              and (pr.valid_to is null or pr.valid_to > current_date)
           ),
           '[]'::jsonb
         )

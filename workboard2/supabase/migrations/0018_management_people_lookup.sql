@@ -44,11 +44,11 @@ begin
     join people pe on pe.id = a.person_id
     where ou.organization_id = any (p_organization_ids)
       and a.valid_from <= current_date
-      and (a.valid_to is null or a.valid_to >= current_date)
+      and (a.valid_to is null or a.valid_to > current_date)
       and p.valid_from <= current_date
-      and (p.valid_to is null or p.valid_to >= current_date)
+      and (p.valid_to is null or p.valid_to > current_date)
       and ou.valid_from <= current_date
-      and (ou.valid_to is null or ou.valid_to >= current_date)
+      and (ou.valid_to is null or ou.valid_to > current_date)
     order by pe.full_name;
 end;
 $$;

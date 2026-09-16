@@ -186,7 +186,7 @@ as $$
   where pr.role = 'EXECUTIVE'
     and pr.organization_id is null
     and pr.valid_from <= current_date
-    and (pr.valid_to is null or pr.valid_to >= current_date);
+    and (pr.valid_to is null or pr.valid_to > current_date);
 $$;
 
 create function send_executive_question(
@@ -428,7 +428,7 @@ begin
     where pr.person_id = actor_id
       and pr.role = 'HEAD'
       and pr.valid_from <= current_date
-      and (pr.valid_to is null or pr.valid_to >= current_date)
+      and (pr.valid_to is null or pr.valid_to > current_date)
   ) then
     raise exception 'เฉพาะหัวหน้าฝ่ายหรือผู้ดูแลระบบเท่านั้นที่ส่งบันทึกข้อความได้';
   end if;

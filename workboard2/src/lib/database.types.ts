@@ -1,5 +1,5 @@
 // Hand-written to mirror supabase/migrations/0001_foundation.sql through
-// 0010_weekly_planner.sql.
+// 0029_database_performance_hotpaths.sql.
 // Once a live Supabase project exists, regenerate with:
 //   npx supabase gen types typescript --project-id <id> > src/lib/database.types.ts
 

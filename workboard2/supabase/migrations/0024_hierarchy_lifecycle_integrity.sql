@@ -22,7 +22,7 @@ as $$
       and pr.role = check_role
       and pr.organization_id = org_id
       and pr.valid_from <= current_date
-      and (pr.valid_to is null or pr.valid_to >= current_date)
+      and (pr.valid_to is null or pr.valid_to > current_date)
       and o.is_active = true
   );
 $$;
@@ -41,11 +41,11 @@ as $$
   join organizations o on o.id = ou.organization_id
   where a.person_id = check_person_id
     and a.valid_from <= current_date
-    and (a.valid_to is null or a.valid_to >= current_date)
+    and (a.valid_to is null or a.valid_to > current_date)
     and p.valid_from <= current_date
-    and (p.valid_to is null or p.valid_to >= current_date)
+    and (p.valid_to is null or p.valid_to > current_date)
     and ou.valid_from <= current_date
-    and (ou.valid_to is null or ou.valid_to >= current_date)
+    and (ou.valid_to is null or ou.valid_to > current_date)
     and o.is_active = true;
 $$;
 

@@ -36,7 +36,7 @@ as $$
     where person_id = current_person_id()
       and role = check_role
       and valid_from <= current_date
-      and (valid_to is null or valid_to >= current_date)
+      and (valid_to is null or valid_to > current_date)
   );
 $$;
 
@@ -54,6 +54,6 @@ as $$
       and role = check_role
       and organization_id = org_id
       and valid_from <= current_date
-      and (valid_to is null or valid_to >= current_date)
+      and (valid_to is null or valid_to > current_date)
   );
 $$;
