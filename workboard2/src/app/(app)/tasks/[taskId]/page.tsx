@@ -7,7 +7,8 @@ import { TimerActionForm } from "@/components/tasks/timer-action-form";
 import { WorkflowActionForm } from "@/components/tasks/workflow-action-form";
 import { TaskCommentForm } from "@/components/tasks/comment-form";
 import { ElapsedTime, LiveElapsedTime } from "@/components/time/live-elapsed-time";
-import { formatThaiDateTime } from "@/lib/date-time";
+import { formatThaiDateTime, toBangkokDateTimeLocalValue } from "@/lib/date-time";
+import { TaskEditPanel } from "@/components/tasks/task-edit-panel";
 import {
   acknowledgeTaskAction,
   startTaskAction,
@@ -61,7 +62,7 @@ export default async function TaskDetailPage(
     supabase
       .from("tasks")
       .select(
-        "id, project_id, workstream_id, milestone_id, title, description, deliverable, completion_criteria, source, work_origin, status, assignee_person_id, reviewer_person_id, approver_person_id, current_holder_person_id, deadline, priority, is_blocked, blocked_reason, is_waiting, waiting_reason, is_on_hold, on_hold_reason",
+        "id, project_id, workstream_id, milestone_id, title, description, deliverable, completion_criteria, source, work_origin, status, assignee_person_id, reviewer_person_id, approver_person_id, current_holder_person_id, deadline, estimated_hours, is_important, is_urgent, priority, is_blocked, blocked_reason, is_waiting, waiting_reason, is_on_hold, on_hold_reason",
       )
       .eq("id", taskId)
       .maybeSingle(),
@@ -201,6 +202,23 @@ export default async function TaskDetailPage(
     task.assignee_person_id === user.personId ||
     hasRoleInOrganization(user, "HEAD", project.organization_id);
   const canTrackOwnTime = task.assignee_person_id === user.personId;
+  const isTerminalTask = ["APPROVED", "COMPLETED", "CANCELLED"].includes(task.status);
+  const canEditPriority =
+    !isTerminalTask &&
+    (task.assignee_person_id === user.personId ||
+      hasRole(user, "ADMIN") ||
+      hasRoleInOrganization(user, "HEAD", project.organization_id));
+  const canEditDetails =
+    !isTerminalTask &&
+    task.source === "MANUAL" &&
+    (task.assignee_person_id === user.personId ||
+      hasRole(user, "ADMIN") ||
+      hasRoleInOrganization(user, "HEAD", project.organization_id));
+  const canCancel =
+    !isTerminalTask &&
+    (hasRole(user, "ADMIN") ||
+      hasRoleInOrganization(user, "HEAD", project.organization_id) ||
+      (task.source === "MANUAL" && task.assignee_person_id === user.personId));
 
   const isHolderSide =
     hasRole(user, "ADMIN") ||
@@ -464,6 +482,22 @@ export default async function TaskDetailPage(
               <p className="text-sm text-slate-400">งานนี้จบแล้ว ไม่มีการดำเนินการเพิ่มเติม</p>
             )}
           </section>
+
+          <TaskEditPanel
+            task={{
+              id: task.id,
+              title: task.title,
+              description: task.description,
+              deadlineLocal: toBangkokDateTimeLocalValue(task.deadline),
+              estimatedHours: task.estimated_hours,
+              isImportant: task.is_important,
+              isUrgent: task.is_urgent,
+              source: task.source,
+            }}
+            canEditPriority={canEditPriority}
+            canEditDetails={canEditDetails}
+            canCancel={canCancel}
+          />
 
           {(taskTimeEntries ?? []).length > 0 || canTrackOwnTime ? (
             <section className="rounded-lg border border-slate-200 bg-white p-4">
