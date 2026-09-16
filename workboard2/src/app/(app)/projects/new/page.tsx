@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, hasRole } from "@/lib/auth";
 import { createProjectAction } from "../actions";
+import { ProjectActionForm } from "@/components/projects/action-form";
 
 export default async function NewProjectPage() {
   const user = await getCurrentUser();
@@ -26,8 +27,10 @@ export default async function NewProjectPage() {
   return (
     <div className="max-w-lg space-y-4">
       <h1 className="text-xl font-semibold">สร้างโครงการ</h1>
-      <form
+      <ProjectActionForm
         action={createProjectAction}
+        submitLabel="สร้างโครงการ"
+        pendingLabel="กำลังสร้าง..."
         className="space-y-3 rounded-lg border border-slate-200 bg-white p-4"
       >
         <div>
@@ -101,10 +104,7 @@ export default async function NewProjectPage() {
             />
           </div>
         </div>
-        <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
-          สร้างโครงการ
-        </button>
-      </form>
+      </ProjectActionForm>
     </div>
   );
 }
