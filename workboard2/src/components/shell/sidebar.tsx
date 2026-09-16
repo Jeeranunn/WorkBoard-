@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 
 interface NavItem {
@@ -70,9 +70,10 @@ export function Sidebar({
   const pathname = usePathname();
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
 
-  useEffect(() => {
-    setNavigatingTo(null);
-  }, [pathname]);
+  const showNavigationIndicator =
+    navigatingTo !== null &&
+    pathname !== navigatingTo &&
+    !pathname.startsWith(`${navigatingTo}/`);
 
   const navProps = {
     pathname,
@@ -81,7 +82,7 @@ export function Sidebar({
 
   return (
     <nav className="relative flex h-full w-60 flex-col gap-6 border-r border-slate-200 bg-white p-4">
-      {navigatingTo && (
+      {showNavigationIndicator && (
         <div
           aria-label="กำลังเปิดหน้า"
           className="absolute inset-x-0 top-0 h-0.5 overflow-hidden bg-slate-100"
