@@ -34,10 +34,5 @@ begin
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then
     create role authenticated nologin;
   end if;
-  if not exists (select 1 from pg_roles where rolname = 'app_test_user') then
-    create role app_test_user login password 'ci-test-only';
-  end if;
 end;
-$$;
-
-grant authenticated to app_test_user;
+$;
