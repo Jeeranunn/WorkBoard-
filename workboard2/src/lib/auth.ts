@@ -18,19 +18,19 @@ export interface CurrentUser {
 }
 
 /**
- * The raw Supabase auth session check, shared by getCurrentUser() below and
- * by (app)/layout.tsx directly. Wrapped in React's cache() so it only hits
- * Supabase Auth once per request no matter how many Server Components call
- * it — cache() is request-scoped (a fresh cache per incoming request in the
- * RSC render tree), so this never leaks a session across users/requests.
+ * Verified auth identity for Server Components.
+ *
+ * getClaims() validates the JWT signature. With Supabase's default asymmetric
+ * signing keys it normally avoids the Auth server round-trip required by
+ * getUser(), which removes a repeated network hop from every navigation.
+ * React cache() keeps this request-scoped.
  */
 export const getAuthUser = cache(async () => {
-  return timed("auth.getUser (RSC)", async () => {
+  return timed("auth.getClaims (RSC)", async () => {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user;
+    const { data, error } = await supabase.auth.getClaims();
+    const subject = !error ? data?.claims?.sub : null;
+    return subject ? { id: subject } : null;
   });
 });
 
