@@ -1029,6 +1029,14 @@ export interface Database {
         };
         Returns: Database["public"]["Tables"]["projects"]["Row"];
       };
+      managed_people_in_organizations: {
+        Args: { p_organization_ids: string[] };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          organization_id: string;
+        }[];
+      };
     };
     Enums: {
       app_role: AppRole;
