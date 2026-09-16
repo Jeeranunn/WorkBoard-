@@ -1077,6 +1077,10 @@ export interface Database {
           active_task_accumulated_seconds: number;
         }[];
       };
+      current_user_context: {
+        Args: Record<PropertyKey, never>;
+        Returns: Json | null;
+      };
     };
     Enums: {
       app_role: AppRole;
