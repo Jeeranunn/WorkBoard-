@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, hasRole } from "@/lib/auth";
 import { ACTIVE_TASK_STATUSES, TASK_STATUS_LABELS } from "@/lib/task-labels";
 import { formatThaiDateTime } from "@/lib/date-time";
+import { TaskPeopleForm } from "@/components/head/task-people-form";
 
 export default async function HeadWorkspacePage() {
   const user = await getCurrentUser();
@@ -91,7 +92,7 @@ export default async function HeadWorkspacePage() {
         ? supabase
             .from("tasks")
             .select(
-              "id, title, project_id, assignee_person_id, current_holder_person_id, status, priority, deadline, is_blocked",
+              "id, title, project_id, assignee_person_id, reviewer_person_id, approver_person_id, current_holder_person_id, status, priority, deadline, is_blocked",
             )
             .in("project_id", projectIds)
             .in("status", ACTIVE_TASK_STATUSES)
@@ -101,6 +102,8 @@ export default async function HeadWorkspacePage() {
               title: string;
               project_id: string;
               assignee_person_id: string;
+              reviewer_person_id: string | null;
+              approver_person_id: string | null;
               current_holder_person_id: string | null;
               status: (typeof ACTIVE_TASK_STATUSES)[number];
               priority: string;
@@ -258,6 +261,42 @@ export default async function HeadWorkspacePage() {
             )}
           </tbody>
         </table>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-3">
+          <h2 className="font-semibold">จัดผู้รับผิดชอบ / ผู้ตรวจ / ผู้อนุมัติ</h2>
+          <p className="text-xs text-slate-500">
+            ใช้สำหรับจัดงานขององค์กรที่คุณดูแลเท่านั้น ระบบจะตรวจสิทธิ์และสมาชิกขององค์กรอีกครั้งก่อนบันทึก
+          </p>
+        </div>
+        <div className="space-y-3">
+          {(tasks ?? []).slice(0, 12).map((task) => (
+            <div key={task.id} className="rounded-lg border border-slate-100 p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <Link href={`/tasks/${task.id}`} className="text-sm font-medium hover:underline">
+                    {task.title}
+                  </Link>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {projectNameById.get(task.project_id) ?? "-"} · {TASK_STATUS_LABELS[task.status]}
+                  </div>
+                </div>
+                <span className="rounded bg-slate-100 px-2 py-1 text-xs">{task.priority}</span>
+              </div>
+              <TaskPeopleForm
+                taskId={task.id}
+                people={(people ?? []).map((person) => ({ id: person.id, name: person.full_name }))}
+                assigneePersonId={task.assignee_person_id}
+                reviewerPersonId={task.reviewer_person_id}
+                approverPersonId={task.approver_person_id}
+              />
+            </div>
+          ))}
+          {(tasks ?? []).length === 0 && (
+            <p className="py-5 text-center text-sm text-slate-400">ยังไม่มีงานให้จัดการ</p>
+          )}
+        </div>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
