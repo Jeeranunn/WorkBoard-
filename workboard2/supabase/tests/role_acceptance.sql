@@ -1,6 +1,15 @@
 -- WorkBoard 2.0 — role acceptance smoke test (after migrations 0001-0013 + seed).
 -- Run as the authenticated test role with app.current_uid support from seed/test harness.
 
+-- Seed planner rows inside this isolated suite.
+set app.current_uid = '10000000-0000-0000-0000-000000000005';
+insert into personal_planner_items (person_id, title, is_important, is_urgent)
+values ('20000000-0000-0000-0000-000000000005', 'บริบทสมาชิก A', true, false);
+
+set app.current_uid = '10000000-0000-0000-0000-000000000006';
+insert into personal_planner_items (person_id, title, is_important, is_urgent)
+values ('20000000-0000-0000-0000-000000000006', 'บริบทสมาชิก B', false, true);
+
 -- MEMBER-A: sees own formal work and own planner data, not Org B private work.
 set app.current_uid = '10000000-0000-0000-0000-000000000005';
 do $$
