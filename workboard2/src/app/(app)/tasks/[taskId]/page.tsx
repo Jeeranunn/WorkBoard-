@@ -5,6 +5,7 @@ import { TASK_STATUS_LABELS, WORK_ORIGIN_LABELS } from "@/lib/task-labels";
 import type { PriorityLevel } from "@/lib/database.types";
 import { TimerActionForm } from "@/components/tasks/timer-action-form";
 import { LiveElapsedTime } from "@/components/time/live-elapsed-time";
+import { formatThaiDateTime } from "@/lib/date-time";
 import {
   acknowledgeTaskAction,
   startTaskAction,
@@ -41,14 +42,6 @@ const PERSON_FIELDS = new Set([
   "reviewer_person_id",
   "approver_person_id",
 ]);
-
-function formatDateTime(value: string | null): string {
-  if (!value) return "-";
-  return new Date(value).toLocaleString("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
 
 export default async function TaskDetailPage(
   props: PageProps<"/tasks/[taskId]">,
@@ -201,14 +194,14 @@ export default async function TaskDetailPage(
     const from = PERSON_FIELDS.has(h.field_name)
       ? name(h.old_value)
       : h.field_name === "deadline"
-        ? formatDateTime(h.old_value)
+        ? formatThaiDateTime(h.old_value)
         : h.field_name === "status"
           ? (TASK_STATUS_LABELS[h.old_value as keyof typeof TASK_STATUS_LABELS] ?? h.old_value ?? "-")
           : (h.old_value ?? "-");
     const to = PERSON_FIELDS.has(h.field_name)
       ? name(h.new_value)
       : h.field_name === "deadline"
-        ? formatDateTime(h.new_value)
+        ? formatThaiDateTime(h.new_value)
         : h.field_name === "status"
           ? (TASK_STATUS_LABELS[h.new_value as keyof typeof TASK_STATUS_LABELS] ?? h.new_value ?? "-")
           : (h.new_value ?? "-");
@@ -321,7 +314,7 @@ export default async function TaskDetailPage(
               </div>
               <div>
                 <dt className="text-xs text-slate-400">กำหนดส่ง</dt>
-                <dd>{formatDateTime(task.deadline)}</dd>
+                <dd>{formatThaiDateTime(task.deadline)}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">ที่มา</dt>
@@ -471,7 +464,7 @@ export default async function TaskDetailPage(
                         className="font-mono text-base font-semibold tabular-nums"
                       />
                       <span className="text-slate-500">
-                        · เริ่ม {formatDateTime(myActiveTimer.started_at)}
+                        · เริ่ม {formatThaiDateTime(myActiveTimer.started_at)}
                       </span>
                     </div>
                   </div>
@@ -520,7 +513,7 @@ export default async function TaskDetailPage(
                 <div key={i} className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
                   {item.node}
                   <p className="mt-0.5 text-xs text-slate-400">
-                    {formatDateTime(item.at)}
+                    {formatThaiDateTime(item.at)}
                   </p>
                 </div>
               ))}
