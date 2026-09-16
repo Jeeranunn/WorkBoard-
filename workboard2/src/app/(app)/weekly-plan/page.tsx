@@ -328,7 +328,7 @@ export default async function WeeklyPlanPage() {
             </select>
             <input
               name="note"
-              placeholder="หมายเหตุ (ถ้ามี)"
+              placeholder="กำลังทำอะไร / เหตุผลที่ว่างหรือไม่ว่าง"
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
           </PlannerActionForm>
@@ -347,6 +347,12 @@ export default async function WeeklyPlanPage() {
               name="title"
               required
               placeholder="เช่น เตรียมอ่านเอกสาร"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+            />
+            <textarea
+              name="notes"
+              rows={3}
+              placeholder="รายละเอียดว่างานอะไร ทำเพื่ออะไร หรือบริบทที่ผู้บริหารควรรู้"
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
             />
             <input
