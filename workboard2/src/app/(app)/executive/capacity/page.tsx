@@ -20,8 +20,6 @@ export default async function ExecutiveCapacityPage() {
     { data: attendance },
     { data: availability },
     { data: slots },
-    { data: personalItems },
-    { data: tasks },
   ] = await Promise.all([
     supabase.from("people").select("id, full_name").order("full_name"),
     supabase
@@ -40,12 +38,35 @@ export default async function ExecutiveCapacityPage() {
       )
       .eq("date", today)
       .order("start_time"),
-    supabase
-      .from("personal_planner_items")
-      .select("id, person_id, title, notes"),
-    supabase
-      .from("tasks")
-      .select("id, title"),
+  ]);
+
+  const personalIds = [
+    ...new Set(
+      (slots ?? [])
+        .map((slot) => slot.personal_planner_item_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const taskIds = [
+    ...new Set(
+      (slots ?? [])
+        .map((slot) => slot.workboard_task_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const [{ data: personalItems }, { data: tasks }] = await Promise.all([
+    personalIds.length
+      ? supabase
+          .from("personal_planner_items")
+          .select("id, person_id, title, notes")
+          .in("id", personalIds)
+      : Promise.resolve({
+          data: [] as { id: string; person_id: string; title: string; notes: string | null }[],
+        }),
+    taskIds.length
+      ? supabase.from("tasks").select("id, title").in("id", taskIds)
+      : Promise.resolve({ data: [] as { id: string; title: string }[] }),
   ]);
 
   const nameById = new Map((people ?? []).map((person) => [person.id, person.full_name]));
