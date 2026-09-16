@@ -8,6 +8,7 @@ import {
   addAvailabilityAction,
   addPersonalItemAction,
   addPlannedSlotAction,
+  applySuggestionAction,
   respondSuggestionAction,
   togglePersonalItemAction,
 } from "./actions";
@@ -70,9 +71,10 @@ export default async function WeeklyPlanPage() {
     supabase
       .from("suggestions")
       .select(
-        "id, task_id, suggested_is_important, suggested_is_urgent, reason, created_at",
+        "id, task_id, suggested_is_important, suggested_is_urgent, reason, status, applied_at, created_at",
       )
-      .eq("status", "pending")
+      .in("status", ["pending", "accepted"])
+      .is("applied_at", null)
       .order("created_at", { ascending: false }),
   ]);
 
@@ -131,26 +133,40 @@ export default async function WeeklyPlanPage() {
                   {suggestion.reason ? ` — ${suggestion.reason}` : ""}
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <PlannerActionForm
-                    action={respondSuggestionAction}
-                    submitLabel="รับคำแนะนำ"
-                    pendingLabel="กำลังตอบ..."
-                    className="space-y-1"
-                    buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
-                  >
-                    <input type="hidden" name="suggestion_id" value={suggestion.id} />
-                    <input type="hidden" name="status" value="accepted" />
-                  </PlannerActionForm>
-                  <PlannerActionForm
-                    action={respondSuggestionAction}
-                    submitLabel="ไม่รับ"
-                    pendingLabel="กำลังตอบ..."
-                    className="space-y-1"
-                    buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium disabled:opacity-60"
-                  >
-                    <input type="hidden" name="suggestion_id" value={suggestion.id} />
-                    <input type="hidden" name="status" value="rejected" />
-                  </PlannerActionForm>
+                  {suggestion.status === "pending" ? (
+                    <>
+                      <PlannerActionForm
+                        action={respondSuggestionAction}
+                        submitLabel="รับคำแนะนำ"
+                        pendingLabel="กำลังตอบ..."
+                        className="space-y-1"
+                        buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+                      >
+                        <input type="hidden" name="suggestion_id" value={suggestion.id} />
+                        <input type="hidden" name="status" value="accepted" />
+                      </PlannerActionForm>
+                      <PlannerActionForm
+                        action={respondSuggestionAction}
+                        submitLabel="ไม่รับ"
+                        pendingLabel="กำลังตอบ..."
+                        className="space-y-1"
+                        buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium disabled:opacity-60"
+                      >
+                        <input type="hidden" name="suggestion_id" value={suggestion.id} />
+                        <input type="hidden" name="status" value="rejected" />
+                      </PlannerActionForm>
+                    </>
+                  ) : (
+                    <PlannerActionForm
+                      action={applySuggestionAction}
+                      submitLabel="นำ Priority นี้ไปใช้"
+                      pendingLabel="กำลังนำไปใช้..."
+                      className="space-y-1"
+                      buttonClassName="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+                    >
+                      <input type="hidden" name="suggestion_id" value={suggestion.id} />
+                    </PlannerActionForm>
+                  )}
                 </div>
               </div>
             ))}
