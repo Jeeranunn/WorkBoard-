@@ -1037,6 +1037,15 @@ export interface Database {
           organization_id: string;
         }[];
       };
+      manage_task_people: {
+        Args: {
+          p_task_id: string;
+          p_assignee_person_id: string;
+          p_reviewer_person_id?: string | null;
+          p_approver_person_id?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
     };
     Enums: {
       app_role: AppRole;
