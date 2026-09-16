@@ -2,9 +2,6 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
 
-// server-timing.ts is marked "server-only", which throws if imported from
-// an Edge Middleware bundle — middleware isn't a Server Component render,
-// so it's timed inline here instead of sharing that helper.
 async function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
   const start = performance.now();
   try {
@@ -40,15 +37,20 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await timed("auth.getUser (middleware)", () => supabase.auth.getUser());
+  // getClaims verifies the JWT and, with Supabase's default asymmetric
+  // signing keys, avoids the per-request Auth server round-trip made by
+  // getUser(). It also refreshes the token through the SSR client when
+  // necessary and lets setAll() propagate refreshed cookies.
+  const { data, error } = await timed("auth.getClaims (middleware)", () =>
+    supabase.auth.getClaims(),
+  );
+  const hasValidIdentity = !error && Boolean(data?.claims?.sub);
 
   const isPublicPath = PUBLIC_PATHS.some((path) =>
     request.nextUrl.pathname.startsWith(path),
   );
 
-  if (!user && !isPublicPath) {
+  if (!hasValidIdentity && !isPublicPath) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     return NextResponse.redirect(redirectUrl);
