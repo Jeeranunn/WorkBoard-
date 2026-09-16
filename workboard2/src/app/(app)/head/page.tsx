@@ -31,42 +31,23 @@ export default async function HeadWorkspacePage() {
 
   const orgIds = (organizations ?? []).map((org) => org.id);
 
-  const { data: units } = orgIds.length
-    ? await supabase
-        .from("organization_units")
-        .select("id, organization_id, name")
-        .in("organization_id", orgIds)
-        .is("valid_to", null)
-    : { data: [] as { id: string; organization_id: string; name: string }[] };
-
-  const unitIds = (units ?? []).map((unit) => unit.id);
-
-  const { data: positions } = unitIds.length
-    ? await supabase
-        .from("positions")
-        .select("id, unit_id, title")
-        .in("unit_id", unitIds)
-        .is("valid_to", null)
-    : { data: [] as { id: string; unit_id: string; title: string }[] };
-
-  const positionIds = (positions ?? []).map((position) => position.id);
-
-  const { data: appointments } = positionIds.length
-    ? await supabase
-        .from("appointments")
-        .select("person_id, position_id")
-        .in("position_id", positionIds)
-        .is("valid_to", null)
-    : { data: [] as { person_id: string; position_id: string }[] };
+  const { data: managedPeople } = orgIds.length
+    ? await supabase.rpc("managed_people_in_organizations", {
+        p_organization_ids: orgIds,
+      })
+    : {
+        data: [] as {
+          person_id: string;
+          full_name: string;
+          organization_id: string;
+        }[],
+      };
 
   const memberIds = [
-    ...new Set((appointments ?? []).map((appointment) => appointment.person_id)),
+    ...new Set((managedPeople ?? []).map((person) => person.person_id)),
   ];
 
-  const [{ data: people }, { data: projects }] = await Promise.all([
-    memberIds.length
-      ? supabase.from("people").select("id, full_name").in("id", memberIds)
-      : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
+  const [{ data: projects }] = await Promise.all([
     orgIds.length
       ? supabase
           .from("projects")
@@ -151,7 +132,9 @@ export default async function HeadWorkspacePage() {
       task.status as (typeof ACTIVE_TASK_STATUSES)[number],
     ),
   );
-  const nameById = new Map((people ?? []).map((person) => [person.id, person.full_name]));
+  const nameById = new Map(
+    (managedPeople ?? []).map((person) => [person.person_id, person.full_name]),
+  );
   const projectNameById = new Map((projects ?? []).map((project) => [project.id, project.name]));
   const activeTimerByPerson = new Map((activeTimers ?? []).map((timer) => [timer.person_id, timer]));
   const attendanceByPerson = new Map((attendance ?? []).map((session) => [session.person_id, session]));
@@ -187,16 +170,11 @@ export default async function HeadWorkspacePage() {
     ["SUBMITTED", "IN_REVIEW", "RESUBMITTED", "PENDING_APPROVAL"].includes(task.status),
   );
 
-  const positionById = new Map((positions ?? []).map((position) => [position.id, position]));
-  const unitById = new Map((units ?? []).map((unit) => [unit.id, unit]));
   const personOrgIds = new Map<string, Set<string>>();
-  for (const appointment of appointments ?? []) {
-    const position = positionById.get(appointment.position_id);
-    const unit = position ? unitById.get(position.unit_id) : null;
-    if (!unit) continue;
-    const set = personOrgIds.get(appointment.person_id) ?? new Set<string>();
-    set.add(unit.organization_id);
-    personOrgIds.set(appointment.person_id, set);
+  for (const person of managedPeople ?? []) {
+    const set = personOrgIds.get(person.person_id) ?? new Set<string>();
+    set.add(person.organization_id);
+    personOrgIds.set(person.person_id, set);
   }
 
   const projectCompletenessIssueCount = new Map<string, number>();
@@ -336,14 +314,19 @@ export default async function HeadWorkspacePage() {
               </div>
               <TaskPeopleForm
                 taskId={task.id}
-                people={(people ?? [])
+                people={(managedPeople ?? [])
                   .filter((person) => {
-                    const project = (projects ?? []).find((item) => item.id === task.project_id);
+                    const project = (projects ?? []).find(
+                      (item) => item.id === task.project_id,
+                    );
                     return project
-                      ? personOrgIds.get(person.id)?.has(project.organization_id)
+                      ? person.organization_id === project.organization_id
                       : false;
                   })
-                  .map((person) => ({ id: person.id, name: person.full_name }))}
+                  .map((person) => ({
+                    id: person.person_id,
+                    name: person.full_name,
+                  }))}
                 assigneePersonId={task.assignee_person_id}
                 reviewerPersonId={task.reviewer_person_id}
                 approverPersonId={task.approver_person_id}
