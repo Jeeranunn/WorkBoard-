@@ -134,7 +134,11 @@ export default async function MyWorkPage() {
       .maybeSingle(),
   ]);
 
-  const [{ data: activeBreak }, { data: activeTimerTask }] = await Promise.all([
+  const [
+    { data: activeBreak },
+    { data: activeTimerTask },
+    { data: priorTimerEntries },
+  ] = await Promise.all([
     attendanceSession
       ? supabase
           .from("attendance_breaks")
@@ -146,7 +150,33 @@ export default async function MyWorkPage() {
     activeTimer
       ? supabase.from("tasks").select("id, title").eq("id", activeTimer.task_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    activeTimer
+      ? supabase
+          .from("task_time_entries")
+          .select("started_at, ended_at")
+          .eq("person_id", personId)
+          .eq("task_id", activeTimer.task_id)
+          .not("ended_at", "is", null)
+      : Promise.resolve({
+          data: [] as { started_at: string; ended_at: string | null }[],
+        }),
   ]);
+
+  const priorActiveTaskSeconds = (priorTimerEntries ?? []).reduce(
+    (sum, entry) =>
+      entry.ended_at
+        ? sum +
+          Math.max(
+            0,
+            Math.floor(
+              (new Date(entry.ended_at).getTime() -
+                new Date(entry.started_at).getTime()) /
+                1000,
+            ),
+          )
+        : sum,
+    0,
+  );
 
   function toRows(tasks: RawTask[] | null): TaskListRow[] {
     return (tasks ?? []).map((t) => ({
@@ -175,13 +205,26 @@ export default async function MyWorkPage() {
       <section className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-4">
         <div className="text-sm">
           {!attendanceSession && <span className="text-slate-400">ยังไม่ได้ Clock In</span>}
-          {attendanceSession && !activeBreak && (
-            <span>เข้างานเมื่อ {formatThaiDateTime(attendanceSession.clock_in_at)}</span>
-          )}
-          {attendanceSession && activeBreak && (
-            <span className="text-amber-600">
-              กำลังพักตั้งแต่ {formatThaiDateTime(activeBreak.break_start_at)}
-            </span>
+          {attendanceSession && (
+            <div className="space-y-1">
+              <div>
+                เข้างานเมื่อ {formatThaiDateTime(attendanceSession.clock_in_at)}
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className={activeBreak ? "text-amber-600" : "text-emerald-700"}>
+                  {activeBreak ? "กำลังพัก · เวลาตั้งแต่ Clock In" : "เวลาตั้งแต่ Clock In"}
+                </span>
+                <LiveElapsedTime
+                  startedAt={attendanceSession.clock_in_at}
+                  className="font-mono text-base font-semibold tabular-nums"
+                />
+              </div>
+              {activeBreak && (
+                <div className="text-xs text-amber-600">
+                  พักตั้งแต่ {formatThaiDateTime(activeBreak.break_start_at)}
+                </div>
+              )}
+            </div>
           )}
         </div>
         <div className="flex gap-2">
@@ -233,6 +276,7 @@ export default async function MyWorkPage() {
               <span>ใช้เวลาแล้ว</span>
               <LiveElapsedTime
                 startedAt={activeTimer.started_at}
+                baseSeconds={priorActiveTaskSeconds}
                 className="font-mono text-base font-semibold tabular-nums"
               />
               <span className="text-slate-500">· เริ่ม {formatThaiDateTime(activeTimer.started_at)}</span>
