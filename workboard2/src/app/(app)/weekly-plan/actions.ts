@@ -19,6 +19,9 @@ async function requireUser() {
 function refreshPlanner() {
   revalidatePath("/weekly-plan");
   revalidatePath("/my-work");
+  revalidatePath("/member");
+  revalidatePath("/head");
+  revalidatePath("/executive/capacity");
   revalidatePath("/overview");
 }
 
@@ -193,6 +196,5 @@ export async function applySuggestionAction(
   if (error) return { error: error.message };
 
   refreshPlanner();
-  revalidatePath("/member");
   return { error: null, success: "นำคำแนะนำไปใช้กับ Priority ของงานแล้ว" };
 }
