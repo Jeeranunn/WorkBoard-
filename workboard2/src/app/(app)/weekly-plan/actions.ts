@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/auth";
 import type { PlannerFormState } from "@/components/planner/action-form";
+import { bangkokLocalDateTimeToIso } from "@/lib/date-time";
 
 function value(formData: FormData, key: string): string {
   return String(formData.get(key) ?? "").trim();
@@ -46,7 +47,7 @@ export async function addPersonalItemAction(
     person_id: user.personId,
     title,
     notes: notes || null,
-    deadline: deadline ? new Date(deadline).toISOString() : null,
+    deadline: deadline ? bangkokLocalDateTimeToIso(deadline) : null,
     estimated_hours: estimatedHours,
     is_important: formData.get("is_important") === "on",
     is_urgent: formData.get("is_urgent") === "on",
