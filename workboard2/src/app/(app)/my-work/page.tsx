@@ -58,11 +58,34 @@ export default async function MyWorkPage() {
   // single fetch plus in-memory bucketing produces identical results in one
   // round trip instead of seven. A task can still appear in multiple
   // sections at once (e.g. an overdue P1 task), matching the prior behavior.
-  const { data: involvedTasks } = await supabase
-    .from("tasks")
-    .select(TASK_COLUMNS)
-    .or(involvedFilter)
-    .in("status", ACTIVE_TASK_STATUSES);
+  //
+  // attendanceSession and activeTimer only depend on personId, same as
+  // involvedTasks — nothing here depends on the task list — so they belong
+  // in this same round trip instead of waiting behind the projects/holders
+  // lookup that only becomes possible once involvedTasks resolves.
+  const [
+    { data: involvedTasks },
+    { data: attendanceSession },
+    { data: activeTimer },
+  ] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select(TASK_COLUMNS)
+      .or(involvedFilter)
+      .in("status", ACTIVE_TASK_STATUSES),
+    supabase
+      .from("attendance_sessions")
+      .select("id, clock_in_at")
+      .eq("person_id", personId)
+      .is("clock_out_at", null)
+      .maybeSingle(),
+    supabase
+      .from("task_time_entries")
+      .select("id, task_id, started_at")
+      .eq("person_id", personId)
+      .is("ended_at", null)
+      .maybeSingle(),
+  ]);
 
   const allTasks: RawTask[] = involvedTasks ?? [];
 
@@ -115,25 +138,10 @@ export default async function MyWorkPage() {
     (holders ?? []).map((h) => [h.id, h.full_name]),
   );
 
-  // Attendance (session -> break) and task timer (timer -> its task) are two
-  // independent chains — each step only depends on its own prior step, not
-  // on the other chain — so each round only waits on the slower of the two,
-  // instead of all four running one after another.
-  const [{ data: attendanceSession }, { data: activeTimer }] = await Promise.all([
-    supabase
-      .from("attendance_sessions")
-      .select("id, clock_in_at")
-      .eq("person_id", personId)
-      .is("clock_out_at", null)
-      .maybeSingle(),
-    supabase
-      .from("task_time_entries")
-      .select("id, task_id, started_at")
-      .eq("person_id", personId)
-      .is("ended_at", null)
-      .maybeSingle(),
-  ]);
-
+  // attendanceSession -> activeBreak and activeTimer -> {activeTimerTask,
+  // priorTimerEntries} are two independent chains that both only depend on
+  // the attendanceSession/activeTimer fetched above, so this round only
+  // waits on the slower of the two instead of running one after another.
   const [
     { data: activeBreak },
     { data: activeTimerTask },
