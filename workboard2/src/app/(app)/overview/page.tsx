@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser, hasRole } from "@/lib/auth";
 import { ACTIVE_TASK_STATUSES, TASK_STATUS_LABELS } from "@/lib/task-labels";
+import { formatThaiDateTime } from "@/lib/date-time";
 
 const ROLE_LABELS = {
   ADMIN: "ผู้ดูแลระบบ",
@@ -142,10 +143,7 @@ export default async function OverviewPage() {
                   <div className="mt-1 text-xs text-slate-400">
                     {TASK_STATUS_LABELS[task.status]}
                     {task.deadline
-                      ? ` · กำหนด ${new Date(task.deadline).toLocaleString("th-TH", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        })}`
+                      ? ` · กำหนด ${formatThaiDateTime(task.deadline)}`
                       : ""}
                   </div>
                 </div>
