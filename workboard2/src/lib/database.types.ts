@@ -179,6 +179,8 @@ export interface Database {
           person_id: string;
           role: AppRole;
           organization_id: string | null;
+          valid_from: string;
+          valid_to: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -187,6 +189,8 @@ export interface Database {
           person_id: string;
           role: AppRole;
           organization_id?: string | null;
+          valid_from?: string;
+          valid_to?: string | null;
           created_at?: string;
           updated_at?: string;
         };
