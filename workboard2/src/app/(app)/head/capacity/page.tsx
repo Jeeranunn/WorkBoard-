@@ -148,6 +148,24 @@ export default async function HeadCapacityPage() {
     slotsByPerson.set(item.person_id, list);
   }
 
+  const peopleById = new Map<
+    string,
+    { person_id: string; full_name: string; organizationIds: Set<string> }
+  >();
+  for (const person of managedPeople ?? []) {
+    const existing = peopleById.get(person.person_id);
+    if (existing) {
+      existing.organizationIds.add(person.organization_id);
+    } else {
+      peopleById.set(person.person_id, {
+        person_id: person.person_id,
+        full_name: person.full_name,
+        organizationIds: new Set([person.organization_id]),
+      });
+    }
+  }
+  const capacityPeople = [...peopleById.values()];
+
   return (
     <div className="space-y-7">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -178,19 +196,21 @@ export default async function HeadCapacityPage() {
             </tr>
           </thead>
           <tbody>
-            {(managedPeople ?? []).map((person) => {
+            {capacityPeople.map((person) => {
               const personAvailability =
                 availabilityByPerson.get(person.person_id) ?? [];
               const personSlots = slotsByPerson.get(person.person_id) ?? [];
 
               return (
                 <tr
-                  key={person.person_id + person.organization_id}
+                  key={person.person_id}
                   className="border-t border-slate-100 align-top"
                 >
                   <td className="px-4 py-4 font-medium">{person.full_name}</td>
                   <td className="px-4 py-4 text-slate-500">
-                    {orgNameById.get(person.organization_id) ?? "-"}
+                    {[...person.organizationIds]
+                      .map((id) => orgNameById.get(id) ?? "-")
+                      .join(", ")}
                   </td>
                   <td className="px-4 py-4">
                     {attendanceSet.has(person.person_id) ? (
@@ -258,7 +278,7 @@ export default async function HeadCapacityPage() {
                 </tr>
               );
             })}
-            {(managedPeople ?? []).length === 0 && (
+            {capacityPeople.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
                   ยังไม่มีสมาชิกในขอบเขตที่คุณดูแล
