@@ -34,6 +34,16 @@ export type TaskStatus =
 export type PriorityLevel = "P1" | "P2" | "P3" | "P4";
 export type TimeEntrySource = "SYSTEM_TRACKED" | "RECONSTRUCTED" | "SELF_DECLARED";
 
+// Standard Supabase-generated JSON type, for RPCs that return `jsonb`
+// (e.g. current_user_context below) rather than a typed table row.
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
+
 export interface Database {
   public: {
     Tables: {
