@@ -1056,6 +1056,14 @@ export interface Database {
         Args: { p_suggestion_id: string };
         Returns: Database["public"]["Tables"]["tasks"]["Row"];
       };
+      end_position_lifecycle: {
+        Args: { p_position_id: string };
+        Returns: Database["public"]["Tables"]["positions"]["Row"];
+      };
+      end_unit_lifecycle: {
+        Args: { p_unit_id: string };
+        Returns: Database["public"]["Tables"]["organization_units"]["Row"];
+      };
     };
     Enums: {
       app_role: AppRole;
