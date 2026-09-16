@@ -33,6 +33,8 @@ export default async function ProjectDetailPage(
   const canManage =
     hasRole(user, "ADMIN") ||
     hasRoleInOrganization(user, "HEAD", project.organization_id);
+  const canViewCompleteness =
+    canManage || hasRole(user, "EXECUTIVE");
   const canAddManualTask =
     canManage ||
     user.roles.some(
@@ -73,8 +75,18 @@ export default async function ProjectDetailPage(
     canManage
       ? supabase.from("playbooks").select("id, key, name")
       : Promise.resolve({ data: [] as { id: string; key: string; name: string }[] }),
-    supabase.from("playbook_tasks").select("id, tag, requires_reviewer"),
-    supabase.from("playbook_conditional_rules").select("if_tag, then_tag, message"),
+    canViewCompleteness
+      ? supabase.from("playbook_tasks").select("id, tag, requires_reviewer")
+      : Promise.resolve({
+          data: [] as { id: string; tag: string | null; requires_reviewer: boolean }[],
+        }),
+    canViewCompleteness
+      ? supabase
+          .from("playbook_conditional_rules")
+          .select("if_tag, then_tag, message")
+      : Promise.resolve({
+          data: [] as { if_tag: string; then_tag: string; message: string }[],
+        }),
     canManage
       ? supabase.rpc("managed_people_in_organizations", {
           p_organization_ids: [project.organization_id],
@@ -238,27 +250,29 @@ export default async function ProjectDetailPage(
         </div>
 
         <div className="space-y-6">
-          <section className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="mb-3 text-sm font-semibold">ความครบถ้วนของโครงการ</h2>
-            {issues.length === 0 ? (
-              <p className="text-sm text-emerald-600">ครบถ้วนตามเกณฑ์ขั้นต่ำ</p>
-            ) : (
-              <ul className="space-y-1 text-sm">
-                {issues.map((issue, i) => (
-                  <li
-                    key={i}
-                    className={
-                      issue.severity === "error"
-                        ? "text-red-600"
-                        : "text-amber-600"
-                    }
-                  >
-                    {issue.message}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          {canViewCompleteness && (
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <h2 className="mb-3 text-sm font-semibold">ความครบถ้วนของโครงการ</h2>
+              {issues.length === 0 ? (
+                <p className="text-sm text-emerald-600">ครบถ้วนตามเกณฑ์ขั้นต่ำ</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {issues.map((issue, i) => (
+                    <li
+                      key={i}
+                      className={
+                        issue.severity === "error"
+                          ? "text-red-600"
+                          : "text-amber-600"
+                      }
+                    >
+                      {issue.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
 
           {canManage && (
             <section className="rounded-lg border border-slate-200 bg-white p-4">
