@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-function formatElapsed(totalSeconds: number): string {
-  const safe = Math.max(0, totalSeconds);
+export function formatElapsed(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
   const hours = Math.floor(safe / 3600);
   const minutes = Math.floor((safe % 3600) / 60);
   const seconds = safe % 60;
@@ -15,25 +15,29 @@ function formatElapsed(totalSeconds: number): string {
 
 export function LiveElapsedTime({
   startedAt,
+  baseSeconds = 0,
   className = "",
 }: {
   startedAt: string;
+  baseSeconds?: number;
   className?: string;
 }) {
   const startedMs = useMemo(() => new Date(startedAt).getTime(), [startedAt]);
   const [seconds, setSeconds] = useState(() =>
-    Math.floor((Date.now() - startedMs) / 1000),
+    baseSeconds + Math.floor((Date.now() - startedMs) / 1000),
   );
 
   useEffect(() => {
     const sync = () => {
-      setSeconds(Math.floor((Date.now() - startedMs) / 1000));
+      setSeconds(
+        baseSeconds + Math.floor((Date.now() - startedMs) / 1000),
+      );
     };
 
     sync();
     const id = window.setInterval(sync, 1000);
     return () => window.clearInterval(id);
-  }, [startedMs]);
+  }, [baseSeconds, startedMs]);
 
   return (
     <span
@@ -43,4 +47,14 @@ export function LiveElapsedTime({
       {formatElapsed(seconds)}
     </span>
   );
+}
+
+export function ElapsedTime({
+  seconds,
+  className = "",
+}: {
+  seconds: number;
+  className?: string;
+}) {
+  return <span className={className}>{formatElapsed(seconds)}</span>;
 }
