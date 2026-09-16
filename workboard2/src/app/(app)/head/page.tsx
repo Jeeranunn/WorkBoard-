@@ -100,7 +100,6 @@ export default async function HeadWorkspacePage() {
               "id, title, project_id, workstream_id, assignee_person_id, reviewer_person_id, approver_person_id, current_holder_person_id, status, priority, deadline, is_blocked",
             )
             .in("project_id", projectIds)
-            .in("status", ACTIVE_TASK_STATUSES)
         : Promise.resolve({
             data: [] as {
               id: string;
@@ -147,6 +146,11 @@ export default async function HeadWorkspacePage() {
     ]);
 
   const nowIso = new Date().toISOString();
+  const activeTasks = (tasks ?? []).filter((task) =>
+    ACTIVE_TASK_STATUSES.includes(
+      task.status as (typeof ACTIVE_TASK_STATUSES)[number],
+    ),
+  );
   const nameById = new Map((people ?? []).map((person) => [person.id, person.full_name]));
   const projectNameById = new Map((projects ?? []).map((project) => [project.id, project.name]));
   const activeTimerByPerson = new Map((activeTimers ?? []).map((timer) => [timer.person_id, timer]));
@@ -157,7 +161,7 @@ export default async function HeadWorkspacePage() {
   const overdueByPerson = new Map<string, number>();
   const blockedByPerson = new Map<string, number>();
 
-  for (const task of tasks ?? []) {
+  for (const task of activeTasks) {
     backlogByPerson.set(
       task.assignee_person_id,
       (backlogByPerson.get(task.assignee_person_id) ?? 0) + 1,
@@ -179,7 +183,7 @@ export default async function HeadWorkspacePage() {
     }
   }
 
-  const reviewQueue = (tasks ?? []).filter((task) =>
+  const reviewQueue = activeTasks.filter((task) =>
     ["SUBMITTED", "IN_REVIEW", "RESUBMITTED", "PENDING_APPROVAL"].includes(task.status),
   );
 
@@ -241,7 +245,7 @@ export default async function HeadWorkspacePage() {
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="text-xs text-slate-500">งานเปิดอยู่</div>
-          <div className="mt-2 text-2xl font-semibold">{(tasks ?? []).length}</div>
+          <div className="mt-2 text-2xl font-semibold">{activeTasks.length}</div>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="text-xs text-slate-500">รอตรวจ/อนุมัติ</div>
@@ -317,7 +321,7 @@ export default async function HeadWorkspacePage() {
           </p>
         </div>
         <div className="space-y-3">
-          {(tasks ?? []).slice(0, 12).map((task) => (
+          {activeTasks.slice(0, 12).map((task) => (
             <div key={task.id} className="rounded-lg border border-slate-100 p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -346,7 +350,7 @@ export default async function HeadWorkspacePage() {
               />
             </div>
           ))}
-          {(tasks ?? []).length === 0 && (
+          {activeTasks.length === 0 && (
             <p className="py-5 text-center text-sm text-slate-400">ยังไม่มีงานให้จัดการ</p>
           )}
         </div>
