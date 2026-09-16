@@ -61,7 +61,12 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   if (!person) return null;
 
   const { data: roleRows } = await timed("person_roles lookup (query)", () =>
-    supabase.from("person_roles").select("role, organization_id").eq("person_id", person.id),
+    supabase
+      .from("person_roles")
+      .select("role, organization_id")
+      .eq("person_id", person.id)
+      .lte("valid_from", new Date().toISOString().slice(0, 10))
+      .or(`valid_to.is.null,valid_to.gte.${new Date().toISOString().slice(0, 10)}`),
   );
 
   return {
