@@ -50,7 +50,7 @@ end;
 $$;
 
 set app.current_uid = '10000000-0000-0000-0000-000000000002'; -- EXECUTIVE
-do $
+do $$
 declare
   n int;
 begin
@@ -60,10 +60,10 @@ begin
   end if;
   raise notice 'OK: EXECUTIVE sees personal planner content for capacity planning';
 end;
-$;
+$$;
 
 set app.current_uid = '10000000-0000-0000-0000-000000000003'; -- HEAD-A
-do $
+do $$
 declare
   n int;
 begin
@@ -79,7 +79,7 @@ begin
   end if;
   raise notice 'OK: HEAD-A sees planner content only inside Organization A';
 end;
-$;
+$$;
 
 set app.current_uid = '10000000-0000-0000-0000-000000000001'; -- ADMIN
 do $$
@@ -193,7 +193,7 @@ end;
 $$;
 
 set app.current_uid = '10000000-0000-0000-0000-000000000002'; -- EXECUTIVE
-do $
+do $$
 declare
   n_total int; n_personal int;
 begin
@@ -207,10 +207,10 @@ begin
   end if;
   raise notice 'OK: EXECUTIVE sees formal and personal planned slots for capacity context';
 end;
-$;
+$$;
 
 set app.current_uid = '10000000-0000-0000-0000-000000000003'; -- HEAD-A
-do $
+do $$
 declare
   n_total int;
 begin
@@ -220,7 +220,7 @@ begin
   end if;
   raise notice 'OK: HEAD-A sees planned slots for people in Organization A';
 end;
-$;
+$$;
 
 -- ===========================================================================
 -- 4. suggestions — proposal only, never writes back to tasks directly.
