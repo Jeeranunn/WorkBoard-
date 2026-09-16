@@ -16,7 +16,7 @@ const ibmPlexSansThai = IBM_Plex_Sans_Thai({
   weight: ["400", "500", "600", "700"],
 });
 
-export const metadata: Metadata = {
+// Supabase production is in Singapore; keep server rendering close to the database\n// so authenticated navigations avoid unnecessary cross-region latency.\nexport const preferredRegion = "sin1";\n\nexport const metadata: Metadata = {
   title: "WorkBoard",
   description: "พื้นที่ทำงานกลางขององค์กร",
 };
