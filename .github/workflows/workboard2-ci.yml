@@ -82,6 +82,7 @@ jobs:
             planner_crud.sql
             capacity_time_snapshot.sql
             task_self_management.sql
+            communication_and_learning.sql
           )
 
           for test_file in "${tests[@]}"; do

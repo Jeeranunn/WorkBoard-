@@ -1,0 +1,27 @@
+-- executive_questions' "question sender update" policy allowed a sender to
+-- directly UPDATE any column of their own question row via PostgREST:
+--
+--   create policy "question sender update" on executive_questions
+--   for update using (sender_person_id = current_person_id() or is_admin());
+--
+-- It had no WITH CHECK, so nothing constrained which columns changed or to
+-- what values. A client could set status back to OPEN after being
+-- ANSWERED/WITHDRAWN, rewrite the question text, reassign
+-- recipient_person_id to an arbitrary person (including a non-executive),
+-- or clear withdrawn_at — all without going through the validated RPCs
+-- (reply_executive_question, withdraw_executive_question) that enforce the
+-- actual state machine (who may act, from which status, setting which
+-- columns).
+--
+-- Every legitimate write this app makes to this table already goes through
+-- those RPCs, which are security definer and so are unaffected by RLS on
+-- the table — confirmed by grep, the app never issues a direct
+-- .update() against executive_questions. meeting_requests already follows
+-- this exact shape (read + insert policies only, all mutation through
+-- security definer RPCs); this brings executive_questions in line with it
+-- instead of leaving it as the one table with an unconstrained direct
+-- update path. Dropping the policy without a replacement — rather than
+-- narrowing it with a WITH CHECK — is the smallest change that still fully
+-- closes the gap, since no column of this table needs to be directly
+-- client-writable.
+drop policy "question sender update" on executive_questions;
