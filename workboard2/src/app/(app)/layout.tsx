@@ -40,6 +40,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <Sidebar
         isAdmin={hasRole(user, "ADMIN")}
         isExecutive={hasRole(user, "EXECUTIVE")}
+        isHead={user.roles.some((grant) => grant.role === "HEAD")}
       />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar fullName={user.fullName} />

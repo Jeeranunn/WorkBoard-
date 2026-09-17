@@ -10,6 +10,8 @@ import {
 import { TASK_STATUS_LABELS } from "@/lib/task-labels";
 import { checkProjectCompleteness } from "@/lib/project-completeness";
 import { applyPlaybookAction } from "../actions";
+import { ManualTaskForm } from "./manual-task-form";
+import { ProjectActionForm } from "@/components/projects/action-form";
 
 export default async function ProjectDetailPage(
   props: PageProps<"/projects/[projectId]">,
@@ -32,6 +34,15 @@ export default async function ProjectDetailPage(
   const canManage =
     hasRole(user, "ADMIN") ||
     hasRoleInOrganization(user, "HEAD", project.organization_id);
+  const canViewCompleteness =
+    canManage || hasRole(user, "EXECUTIVE");
+  const canAddManualTask =
+    canManage ||
+    user.roles.some(
+      (grant) =>
+        grant.role === "MEMBER" &&
+        grant.organizationId === project.organization_id,
+    );
 
   // playbooks (the template list) only feeds the "ใช้ Playbook" panel, which
   // is only rendered for canManage — skip fetching it for everyone else.
@@ -44,6 +55,7 @@ export default async function ProjectDetailPage(
     { data: playbooks },
     { data: playbookTasks },
     { data: conditionalRules },
+    { data: assignablePeople },
   ] = await Promise.all([
     supabase
       .from("organizations")
@@ -64,8 +76,29 @@ export default async function ProjectDetailPage(
     canManage
       ? supabase.from("playbooks").select("id, key, name")
       : Promise.resolve({ data: [] as { id: string; key: string; name: string }[] }),
-    supabase.from("playbook_tasks").select("id, tag"),
-    supabase.from("playbook_conditional_rules").select("if_tag, then_tag, message"),
+    canViewCompleteness
+      ? supabase.from("playbook_tasks").select("id, tag, requires_reviewer")
+      : Promise.resolve({
+          data: [] as { id: string; tag: string | null; requires_reviewer: boolean }[],
+        }),
+    canViewCompleteness
+      ? supabase
+          .from("playbook_conditional_rules")
+          .select("if_tag, then_tag, message")
+      : Promise.resolve({
+          data: [] as { if_tag: string; then_tag: string; message: string }[],
+        }),
+    canManage
+      ? supabase.rpc("managed_people_in_organizations", {
+          p_organization_ids: [project.organization_id],
+        })
+      : Promise.resolve({
+          data: [] as {
+            person_id: string;
+            full_name: string;
+            organization_id: string;
+          }[],
+        }),
   ]);
 
   const holderIds = [
@@ -85,6 +118,20 @@ export default async function ProjectDetailPage(
       .filter((pt) => pt.tag)
       .map((pt) => [pt.id, pt.tag as string]),
   );
+  const reviewRequiredSourceIds = new Set(
+    (playbookTasks ?? [])
+      .filter((pt) => pt.requires_reviewer)
+      .map((pt) => pt.id),
+  );
+  const reviewRequiredTaskIds = new Set(
+    (tasks ?? [])
+      .filter(
+        (task) =>
+          task.source_playbook_task_id &&
+          reviewRequiredSourceIds.has(task.source_playbook_task_id),
+      )
+      .map((task) => task.id),
+  );
 
   const issues = checkProjectCompleteness({
     project: { target_date: project.target_date },
@@ -92,6 +139,7 @@ export default async function ProjectDetailPage(
     tasks: tasks ?? [],
     taskTagById,
     conditionalRules: conditionalRules ?? [],
+    reviewRequiredTaskIds,
   });
 
   const tasksByWorkstream = new Map<string | null, NonNullable<typeof tasks>>();
@@ -124,6 +172,29 @@ export default async function ProjectDetailPage(
 
       <div className="grid gap-6 md:grid-cols-3">
         <div className="space-y-6 md:col-span-2">
+          {canAddManualTask && (
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <div className="mb-3">
+                <h2 className="text-sm font-semibold">เพิ่มงานเอง</h2>
+                <p className="text-xs text-slate-500">
+                  โครงการนี้ไม่จำเป็นต้องใช้ร่างมาตรฐาน งานที่เพิ่มเองจะถูกบันทึกเป็นงานที่เพิ่มภายหลัง (ADDED)
+                </p>
+              </div>
+              <ManualTaskForm
+                projectId={project.id}
+                workstreams={(workstreams ?? []).map((item) => ({
+                  id: item.id,
+                  name: item.name,
+                }))}
+                people={(assignablePeople ?? []).map((person) => ({
+                  id: person.person_id,
+                  name: person.full_name,
+                }))}
+                canAssignOthers={canManage}
+              />
+            </section>
+          )}
+
           <section className="rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="mb-3 text-sm font-semibold">กลุ่มงานและงาน</h2>
             {(workstreams ?? []).map((ws) => (
@@ -180,40 +251,46 @@ export default async function ProjectDetailPage(
         </div>
 
         <div className="space-y-6">
-          <section className="rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="mb-3 text-sm font-semibold">ความครบถ้วนของโครงการ</h2>
-            {issues.length === 0 ? (
-              <p className="text-sm text-emerald-600">ครบถ้วนตามเกณฑ์ขั้นต่ำ</p>
-            ) : (
-              <ul className="space-y-1 text-sm">
-                {issues.map((issue, i) => (
-                  <li
-                    key={i}
-                    className={
-                      issue.severity === "error"
-                        ? "text-red-600"
-                        : "text-amber-600"
-                    }
-                  >
-                    {issue.message}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          {canViewCompleteness && (
+            <section className="rounded-lg border border-slate-200 bg-white p-4">
+              <h2 className="mb-3 text-sm font-semibold">ความครบถ้วนของโครงการ</h2>
+              {issues.length === 0 ? (
+                <p className="text-sm text-emerald-600">ครบถ้วนตามเกณฑ์ขั้นต่ำ</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {issues.map((issue, i) => (
+                    <li
+                      key={i}
+                      className={
+                        issue.severity === "error"
+                          ? "text-red-600"
+                          : "text-amber-600"
+                      }
+                    >
+                      {issue.message}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
 
           {canManage && (
             <section className="rounded-lg border border-slate-200 bg-white p-4">
               <h2 className="mb-3 text-sm font-semibold">ใช้ Playbook</h2>
               <div className="space-y-2">
                 {(playbooks ?? []).map((pb) => (
-                  <form key={pb.id} action={applyPlaybookAction}>
+                  <ProjectActionForm
+                    key={pb.id}
+                    action={applyPlaybookAction}
+                    submitLabel={pb.name}
+                    pendingLabel="กำลังเพิ่ม..."
+                    className="space-y-1"
+                    buttonClassName="w-full rounded-md border border-slate-300 px-3 py-1.5 text-left text-sm hover:bg-slate-50 disabled:opacity-60"
+                  >
                     <input type="hidden" name="project_id" value={project.id} />
                     <input type="hidden" name="playbook_id" value={pb.id} />
-                    <button className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-left text-sm hover:bg-slate-50">
-                      {pb.name}
-                    </button>
-                  </form>
+                  </ProjectActionForm>
                 ))}
               </div>
               <p className="mt-2 text-xs text-slate-400">

@@ -9,6 +9,7 @@ import {
 } from "@/lib/project-labels";
 import { ACTIVE_TASK_STATUSES } from "@/lib/task-labels";
 import type { ProjectHealth } from "@/lib/database.types";
+import { PrioritySuggestionForm } from "@/components/executive/priority-suggestion-form";
 
 // The one genuinely sequential query on this page — it needs topHolderIds,
 // computed from the tasks already fetched above — so it's the one part of
@@ -176,11 +177,33 @@ export default async function ExecutiveDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">ภาพรวมผู้บริหาร</h1>
-        <p className="text-sm text-slate-500">
-          เครือข่าย → องค์กร → โครงการ ทั้งหมดในระบบ
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">ภาพรวมผู้บริหาร</h1>
+          <p className="text-sm text-slate-500">
+            เครือข่าย → องค์กร → โครงการ ทั้งหมดในระบบ
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/management-board"
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white"
+          >
+            บอร์ดบริหาร
+          </Link>
+          <Link
+            href="/executive/capacity"
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            ดู Capacity
+          </Link>
+          <a
+            href="/executive/export"
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+          >
+            ดาวน์โหลดรายงาน CSV
+          </a>
+        </div>
       </div>
 
       <section className="grid gap-4 sm:grid-cols-4">
@@ -226,6 +249,20 @@ export default async function ExecutiveDashboardPage() {
             projectNameById={projectNameById}
           />
         </div>
+      </section>
+
+      <section className="max-w-2xl rounded-lg border border-slate-200 bg-white p-4">
+          <h2 className="mb-1 text-sm font-semibold">เสนอปรับ Priority</h2>
+          <p className="mb-3 text-xs text-slate-500">
+            เป็นคำแนะนำให้ผู้รับผิดชอบพิจารณา ไม่เปลี่ยน Priority ของงานโดยอัตโนมัติ
+          </p>
+          <PrioritySuggestionForm
+            tasks={activeTasks.map((task) => ({
+              id: task.id,
+              title: task.title,
+              projectName: projectNameById.get(task.project_id) ?? "-",
+            }))}
+          />
       </section>
 
       <div className="grid gap-6 md:grid-cols-3">

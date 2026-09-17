@@ -17,19 +17,19 @@ export interface CurrentUser {
 }
 
 /**
- * The raw Supabase auth session check, shared by getCurrentUser() below and
- * by (app)/layout.tsx directly. Wrapped in React's cache() so it only hits
- * Supabase Auth once per request no matter how many Server Components call
- * it — cache() is request-scoped (a fresh cache per incoming request in the
- * RSC render tree), so this never leaks a session across users/requests.
+ * Verified auth identity for Server Components.
+ *
+ * getClaims() validates the JWT signature. With Supabase's default asymmetric
+ * signing keys it normally avoids the Auth server round-trip required by
+ * getUser(), which removes a repeated network hop from every navigation.
+ * React cache() keeps this request-scoped.
  */
 export const getAuthUser = cache(async () => {
-  return timed("auth.getUser (RSC)", async () => {
+  return timed("auth.getClaims (RSC)", async () => {
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user;
+    const { data, error } = await supabase.auth.getClaims();
+    const subject = !error ? data?.claims?.sub : null;
+    return subject ? { id: subject } : null;
   });
 });
 
@@ -50,28 +50,54 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 
   const supabase = await createClient();
 
-  const { data: person } = await timed("people lookup (query)", () =>
-    supabase
-      .from("people")
-      .select("id, full_name, email")
-      .eq("auth_user_id", user.id)
-      .maybeSingle(),
+  const { data } = await timed("current_user_context (query)", () =>
+    supabase.rpc("current_user_context"),
   );
 
-  if (!person) return null;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
 
-  const { data: roleRows } = await timed("person_roles lookup (query)", () =>
-    supabase.from("person_roles").select("role, organization_id").eq("person_id", person.id),
-  );
+  const raw = data as {
+    person_id?: unknown;
+    full_name?: unknown;
+    email?: unknown;
+    roles?: unknown;
+  };
+
+  if (
+    typeof raw.person_id !== "string" ||
+    typeof raw.full_name !== "string" ||
+    typeof raw.email !== "string"
+  ) {
+    return null;
+  }
+
+  const roles = Array.isArray(raw.roles)
+    ? raw.roles.flatMap((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+        const role = (item as { role?: unknown }).role;
+        const organizationId = (item as { organization_id?: unknown }).organization_id;
+
+        if (
+          !["ADMIN", "EXECUTIVE", "HEAD", "MEMBER"].includes(String(role)) ||
+          !(organizationId === null || typeof organizationId === "string")
+        ) {
+          return [];
+        }
+
+        return [
+          {
+            role: String(role) as AppRole,
+            organizationId: organizationId as string | null,
+          },
+        ];
+      })
+    : [];
 
   return {
-    personId: person.id,
-    fullName: person.full_name,
-    email: person.email,
-    roles: (roleRows ?? []).map((r) => ({
-      role: r.role,
-      organizationId: r.organization_id,
-    })),
+    personId: raw.person_id,
+    fullName: raw.full_name,
+    email: raw.email,
+    roles,
   };
 });
 

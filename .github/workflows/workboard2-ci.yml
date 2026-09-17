@@ -1,0 +1,112 @@
+name: WorkBoard 2 CI
+
+on:
+  pull_request:
+    paths:
+      - "workboard2/**"
+      - ".github/workflows/workboard2-ci.yml"
+  push:
+    branches:
+      - workboard-completion-pass
+    paths:
+      - "workboard2/**"
+      - ".github/workflows/workboard2-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workboard2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: workboard2/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+
+
+  database-regression:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -y && sudo apt-get install -y postgresql-client
+
+      - name: Run SQL regression suites on fresh databases
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+
+          tests=(
+            workflow_and_rls.sql
+            timer_flow.sql
+            weekly_planner_rls.sql
+            manual_task_creation.sql
+            role_acceptance.sql
+            planner_schedule_integrity.sql
+            management_assignment_integrity.sql
+            admin_lifecycle.sql
+            planner_crud.sql
+            capacity_time_snapshot.sql
+            task_self_management.sql
+            communication_and_learning.sql
+          )
+
+          for test_file in "${tests[@]}"; do
+            echo "=== $test_file ==="
+            psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS workboard_ci WITH (FORCE);"
+            psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE workboard_ci;"
+
+            psql -h localhost -U postgres -d workboard_ci -v ON_ERROR_STOP=1 -f workboard2/supabase/tests/ci_bootstrap.sql
+
+            for migration in workboard2/supabase/migrations/*.sql; do
+              psql -h localhost -U postgres -d workboard_ci -v ON_ERROR_STOP=1 -f "$migration"
+            done
+
+            psql -h localhost -U postgres -d workboard_ci -v ON_ERROR_STOP=1 -f workboard2/supabase/seed.sql
+
+            psql -h localhost -U postgres -d workboard_ci -v ON_ERROR_STOP=1 <<'SQL'
+          grant usage on schema public to authenticated;
+          grant usage on schema auth to authenticated;
+          grant select, insert, update, delete on all tables in schema public to authenticated;
+          grant usage, select on all sequences in schema public to authenticated;
+          grant execute on all functions in schema public to authenticated;
+          grant execute on function auth.uid() to authenticated;
+          set role authenticated;
+          SQL
+
+            psql -h localhost -U postgres -d workboard_ci -v ON_ERROR_STOP=1               -c "set role authenticated;"               -f "workboard2/supabase/tests/$test_file"
+          done

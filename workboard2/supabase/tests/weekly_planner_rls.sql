@@ -5,13 +5,13 @@
 --
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/weekly_planner_rls.sql
 --
--- Focus: personal_planner_items must be strictly private (owner + ADMIN
--- only — EXECUTIVE/chair must NOT see them), availability/planned_slots
--- give chair formal-work oversight without leaking personal items, and
--- suggestions stay proposals that never touch tasks.is_important/is_urgent.
+-- Focus after 0012_capacity_visibility.sql:
+-- owners keep write control, while EXECUTIVE can read planner content for
+-- capacity planning and HEAD can read only people in organizations they
+-- oversee. Suggestions remain proposals that never mutate task priority.
 
 -- ===========================================================================
--- 1. personal_planner_items — strict privacy.
+-- 1. personal_planner_items — scoped management visibility, owner-only write.
 -- ===========================================================================
 
 set app.current_uid = '10000000-0000-0000-0000-000000000005'; -- MEMBER-A
@@ -55,10 +55,10 @@ declare
   n int;
 begin
   select count(*) into n from personal_planner_items;
-  if n <> 0 then
-    raise exception 'ASSERTION_FAILURE: EXECUTIVE (chair) must see zero personal_planner_items, saw %', n;
+  if n <> 2 then
+    raise exception 'ASSERTION_FAILURE: EXECUTIVE should see all 2 personal_planner_items for capacity context, saw %', n;
   end if;
-  raise notice 'OK: EXECUTIVE (chair) sees no personal_planner_items at all — strict privacy holds';
+  raise notice 'OK: EXECUTIVE sees personal planner content for capacity planning';
 end;
 $$;
 
@@ -68,10 +68,16 @@ declare
   n int;
 begin
   select count(*) into n from personal_planner_items;
-  if n <> 0 then
-    raise exception 'ASSERTION_FAILURE: HEAD-A must see zero personal_planner_items, saw %', n;
+  if n <> 1 then
+    raise exception 'ASSERTION_FAILURE: HEAD-A should see only MEMBER-A personal item, saw %', n;
   end if;
-  raise notice 'OK: HEAD-A (org-scoped oversight) sees no personal_planner_items either';
+  if exists (
+    select 1 from personal_planner_items
+    where person_id = '20000000-0000-0000-0000-000000000006'
+  ) then
+    raise exception 'ASSERTION_FAILURE: HEAD-A must not see MEMBER-B personal item';
+  end if;
+  raise notice 'OK: HEAD-A sees planner content only inside Organization A';
 end;
 $$;
 
@@ -193,13 +199,26 @@ declare
 begin
   select count(*) into n_total from planned_slots;
   select count(*) into n_personal from planned_slots where personal_planner_item_id is not null;
-  if n_total <> 1 then
-    raise exception 'ASSERTION_FAILURE: EXECUTIVE should see exactly 1 slot (the WorkBoard-task one), saw %', n_total;
+  if n_total <> 2 then
+    raise exception 'ASSERTION_FAILURE: EXECUTIVE should see both planned slots for capacity, saw %', n_total;
   end if;
-  if n_personal <> 0 then
-    raise exception 'ASSERTION_FAILURE: EXECUTIVE must not see any personal-item-backed slot, saw %', n_personal;
+  if n_personal <> 1 then
+    raise exception 'ASSERTION_FAILURE: EXECUTIVE should see the personal-item-backed slot, saw %', n_personal;
   end if;
-  raise notice 'OK: EXECUTIVE (chair) sees only the WorkBoard-task-backed slot, not the personal-item one';
+  raise notice 'OK: EXECUTIVE sees formal and personal planned slots for capacity context';
+end;
+$$;
+
+set app.current_uid = '10000000-0000-0000-0000-000000000003'; -- HEAD-A
+do $$
+declare
+  n_total int;
+begin
+  select count(*) into n_total from planned_slots;
+  if n_total <> 2 then
+    raise exception 'ASSERTION_FAILURE: HEAD-A should see MEMBER-A planned slots, saw %', n_total;
+  end if;
+  raise notice 'OK: HEAD-A sees planned slots for people in Organization A';
 end;
 $$;
 
@@ -260,7 +279,32 @@ begin
      or (select is_urgent from tasks where id = '70000000-0000-0000-0000-000000000004') <> v_before_urgent then
     raise exception 'ASSERTION_FAILURE: accepting a suggestion must not itself write tasks.is_important/is_urgent';
   end if;
-  raise notice 'OK: MEMBER-A accepted the suggestion via respond_to_suggestion(); task columns still untouched (proposal only)';
+  raise notice 'OK: MEMBER-A accepted the suggestion; task columns remain unchanged until explicit apply';
+end;
+$$;
+
+do $$
+declare
+  v_suggestion_id uuid;
+begin
+  select id into v_suggestion_id
+  from suggestions
+  where task_id = '70000000-0000-0000-0000-000000000004'
+  order by created_at desc
+  limit 1;
+
+  perform apply_accepted_suggestion(v_suggestion_id);
+
+  if not (select is_important from tasks where id = '70000000-0000-0000-0000-000000000004')
+     or not (select is_urgent from tasks where id = '70000000-0000-0000-0000-000000000004') then
+    raise exception 'ASSERTION_FAILURE: applying accepted suggestion should set t4 to P1 flags';
+  end if;
+
+  if (select applied_at from suggestions where id = v_suggestion_id) is null then
+    raise exception 'ASSERTION_FAILURE: applied suggestion must record applied_at';
+  end if;
+
+  raise notice 'OK: accepted suggestion applied explicitly and task priority flags updated';
 end;
 $$;
 

@@ -4,6 +4,11 @@ import { getCurrentUser, hasRole, hasRoleInOrganization } from "@/lib/auth";
 import { TASK_STATUS_LABELS, WORK_ORIGIN_LABELS } from "@/lib/task-labels";
 import type { PriorityLevel } from "@/lib/database.types";
 import { TimerActionForm } from "@/components/tasks/timer-action-form";
+import { WorkflowActionForm } from "@/components/tasks/workflow-action-form";
+import { TaskCommentForm } from "@/components/tasks/comment-form";
+import { ElapsedTime, LiveElapsedTime } from "@/components/time/live-elapsed-time";
+import { formatThaiDateTime, toBangkokDateTimeLocalValue } from "@/lib/date-time";
+import { TaskEditPanel } from "@/components/tasks/task-edit-panel";
 import {
   acknowledgeTaskAction,
   startTaskAction,
@@ -17,7 +22,6 @@ import {
   startTaskTimerAction,
   switchTaskTimerAction,
   pauseTaskTimerAction,
-  addCommentAction,
 } from "../actions";
 
 const PRIORITY_STYLES: Record<PriorityLevel, string> = {
@@ -41,14 +45,6 @@ const PERSON_FIELDS = new Set([
   "approver_person_id",
 ]);
 
-function formatDateTime(value: string | null): string {
-  if (!value) return "-";
-  return new Date(value).toLocaleString("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
-
 export default async function TaskDetailPage(
   props: PageProps<"/tasks/[taskId]">,
 ) {
@@ -66,7 +62,7 @@ export default async function TaskDetailPage(
     supabase
       .from("tasks")
       .select(
-        "id, project_id, workstream_id, milestone_id, title, description, deliverable, completion_criteria, source, work_origin, status, assignee_person_id, reviewer_person_id, approver_person_id, current_holder_person_id, deadline, priority, is_blocked, blocked_reason, is_waiting, waiting_reason, is_on_hold, on_hold_reason",
+        "id, project_id, workstream_id, milestone_id, title, description, deliverable, completion_criteria, source, work_origin, status, assignee_person_id, reviewer_person_id, approver_person_id, current_holder_person_id, deadline, estimated_hours, is_important, is_urgent, priority, is_blocked, blocked_reason, is_waiting, waiting_reason, is_on_hold, on_hold_reason",
       )
       .eq("id", taskId)
       .maybeSingle(),
@@ -90,6 +86,7 @@ export default async function TaskDetailPage(
     { data: submissions },
     { data: comments },
     { data: history },
+    { data: taskTimeEntries },
   ] = await Promise.all([
     supabase
       .from("projects")
@@ -134,6 +131,11 @@ export default async function TaskDetailPage(
       .select("id, changed_by_person_id, field_name, old_value, new_value, changed_at")
       .eq("task_id", taskId)
       .order("changed_at", { ascending: true }),
+    supabase
+      .from("task_time_entries")
+      .select("id, person_id, started_at, ended_at, source")
+      .eq("task_id", taskId)
+      .order("started_at", { ascending: true }),
   ]);
 
   if (!project) notFound();
@@ -178,10 +180,45 @@ export default async function TaskDetailPage(
   const nameById = new Map((peopleRows ?? []).map((p) => [p.id, p.full_name]));
   const name = (id: string | null) => (id ? (nameById.get(id) ?? "-") : "-");
 
+  const closedTaskSeconds = (taskTimeEntries ?? []).reduce((sum, entry) => {
+    if (!entry.ended_at) return sum;
+    return (
+      sum +
+      Math.max(
+        0,
+        Math.floor(
+          (new Date(entry.ended_at).getTime() -
+            new Date(entry.started_at).getTime()) /
+            1000,
+        ),
+      )
+    );
+  }, 0);
+  const activeTaskTimeEntry =
+    (taskTimeEntries ?? []).find((entry) => !entry.ended_at) ?? null;
+
   const isAssigneeSide =
     hasRole(user, "ADMIN") ||
     task.assignee_person_id === user.personId ||
     hasRoleInOrganization(user, "HEAD", project.organization_id);
+  const canTrackOwnTime = task.assignee_person_id === user.personId;
+  const isTerminalTask = ["APPROVED", "COMPLETED", "CANCELLED"].includes(task.status);
+  const canEditPriority =
+    !isTerminalTask &&
+    (task.assignee_person_id === user.personId ||
+      hasRole(user, "ADMIN") ||
+      hasRoleInOrganization(user, "HEAD", project.organization_id));
+  const canEditDetails =
+    !isTerminalTask &&
+    task.source === "MANUAL" &&
+    (task.assignee_person_id === user.personId ||
+      hasRole(user, "ADMIN") ||
+      hasRoleInOrganization(user, "HEAD", project.organization_id));
+  const canCancel =
+    !isTerminalTask &&
+    (hasRole(user, "ADMIN") ||
+      hasRoleInOrganization(user, "HEAD", project.organization_id) ||
+      (task.source === "MANUAL" && task.assignee_person_id === user.personId));
 
   const isHolderSide =
     hasRole(user, "ADMIN") ||
@@ -200,14 +237,14 @@ export default async function TaskDetailPage(
     const from = PERSON_FIELDS.has(h.field_name)
       ? name(h.old_value)
       : h.field_name === "deadline"
-        ? formatDateTime(h.old_value)
+        ? formatThaiDateTime(h.old_value)
         : h.field_name === "status"
           ? (TASK_STATUS_LABELS[h.old_value as keyof typeof TASK_STATUS_LABELS] ?? h.old_value ?? "-")
           : (h.old_value ?? "-");
     const to = PERSON_FIELDS.has(h.field_name)
       ? name(h.new_value)
       : h.field_name === "deadline"
-        ? formatDateTime(h.new_value)
+        ? formatThaiDateTime(h.new_value)
         : h.field_name === "status"
           ? (TASK_STATUS_LABELS[h.new_value as keyof typeof TASK_STATUS_LABELS] ?? h.new_value ?? "-")
           : (h.new_value ?? "-");
@@ -320,7 +357,7 @@ export default async function TaskDetailPage(
               </div>
               <div>
                 <dt className="text-xs text-slate-400">กำหนดส่ง</dt>
-                <dd>{formatDateTime(task.deadline)}</dd>
+                <dd>{formatThaiDateTime(task.deadline)}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">ที่มา</dt>
@@ -334,68 +371,60 @@ export default async function TaskDetailPage(
             <h2 className="mb-3 text-sm font-semibold">การดำเนินการ</h2>
             <div className="flex flex-wrap gap-2">
               {task.status === "ASSIGNED" && isAssigneeSide && (
-                <form action={acknowledgeTaskAction}>
-                  <input type="hidden" name="task_id" value={task.id} />
+                <WorkflowActionForm action={acknowledgeTaskAction} taskId={task.id}>
                   <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                     รับทราบงาน
                   </button>
-                </form>
+                </WorkflowActionForm>
               )}
               {task.status === "ACKNOWLEDGED" && isAssigneeSide && (
-                <form action={startTaskAction}>
-                  <input type="hidden" name="task_id" value={task.id} />
+                <WorkflowActionForm action={startTaskAction} taskId={task.id}>
                   <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                     เริ่มทำงาน
                   </button>
-                </form>
+                </WorkflowActionForm>
               )}
               {(task.status === "SUBMITTED" || task.status === "RESUBMITTED") &&
                 isHolderSide && (
-                  <form action={beginReviewAction}>
-                    <input type="hidden" name="task_id" value={task.id} />
+                  <WorkflowActionForm action={beginReviewAction} taskId={task.id}>
                     <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                       เริ่มตรวจงาน
                     </button>
-                  </form>
+                  </WorkflowActionForm>
                 )}
               {task.status === "IN_REVIEW" &&
                 isHolderSide &&
                 (task.approver_person_id ? (
-                  <form action={submitForApprovalAction}>
-                    <input type="hidden" name="task_id" value={task.id} />
+                  <WorkflowActionForm action={submitForApprovalAction} taskId={task.id}>
                     <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                       ส่งต่อผู้อนุมัติ
                     </button>
-                  </form>
+                  </WorkflowActionForm>
                 ) : (
-                  <form action={approveTaskAction}>
-                    <input type="hidden" name="task_id" value={task.id} />
+                  <WorkflowActionForm action={approveTaskAction} taskId={task.id}>
                     <button className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
                       อนุมัติ
                     </button>
-                  </form>
+                  </WorkflowActionForm>
                 ))}
               {task.status === "PENDING_APPROVAL" && isHolderSide && (
-                <form action={approveTaskAction}>
-                  <input type="hidden" name="task_id" value={task.id} />
+                <WorkflowActionForm action={approveTaskAction} taskId={task.id}>
                   <button className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
                     อนุมัติ
                   </button>
-                </form>
+                </WorkflowActionForm>
               )}
               {task.status === "APPROVED" && isAssigneeSide && (
-                <form action={completeTaskAction}>
-                  <input type="hidden" name="task_id" value={task.id} />
+                <WorkflowActionForm action={completeTaskAction} taskId={task.id}>
                   <button className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm text-white">
                     ปิดงาน
                   </button>
-                </form>
+                </WorkflowActionForm>
               )}
             </div>
 
             {task.status === "IN_PROGRESS" && isAssigneeSide && (
-              <form action={submitTaskAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
-                <input type="hidden" name="task_id" value={task.id} />
+              <WorkflowActionForm action={submitTaskAction} taskId={task.id} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
                 <label className="text-xs font-medium text-slate-500">ส่งงาน</label>
                 <textarea
                   name="message"
@@ -411,12 +440,11 @@ export default async function TaskDetailPage(
                 <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                   ส่งงาน
                 </button>
-              </form>
+              </WorkflowActionForm>
             )}
 
             {task.status === "REVISION_REQUIRED" && isAssigneeSide && (
-              <form action={resubmitTaskAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
-                <input type="hidden" name="task_id" value={task.id} />
+              <WorkflowActionForm action={resubmitTaskAction} taskId={task.id} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
                 <label className="text-xs font-medium text-slate-500">ส่งงานใหม่</label>
                 <textarea
                   name="message"
@@ -432,12 +460,11 @@ export default async function TaskDetailPage(
                 <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
                   ส่งงานใหม่
                 </button>
-              </form>
+              </WorkflowActionForm>
             )}
 
             {task.status === "IN_REVIEW" && isHolderSide && (
-              <form action={requestRevisionAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
-                <input type="hidden" name="task_id" value={task.id} />
+              <WorkflowActionForm action={requestRevisionAction} taskId={task.id} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
                 <label className="text-xs font-medium text-slate-500">ขอให้แก้ไข</label>
                 <textarea
                   name="note"
@@ -448,7 +475,7 @@ export default async function TaskDetailPage(
                 <button className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700">
                   ขอให้แก้ไข
                 </button>
-              </form>
+              </WorkflowActionForm>
             )}
 
             {["COMPLETED", "CANCELLED"].includes(task.status) && (
@@ -456,47 +483,90 @@ export default async function TaskDetailPage(
             )}
           </section>
 
-          {isAssigneeSide && (
+          <TaskEditPanel
+            task={{
+              id: task.id,
+              title: task.title,
+              description: task.description,
+              deadlineLocal: toBangkokDateTimeLocalValue(task.deadline),
+              estimatedHours: task.estimated_hours,
+              isImportant: task.is_important,
+              isUrgent: task.is_urgent,
+              source: task.source,
+            }}
+            canEditPriority={canEditPriority}
+            canEditDetails={canEditDetails}
+            canCancel={canCancel}
+          />
+
+          {(taskTimeEntries ?? []).length > 0 || canTrackOwnTime ? (
             <section className="rounded-lg border border-slate-200 bg-white p-4">
               <h2 className="mb-2 text-sm font-semibold">เวลาในงานนี้</h2>
-              {myActiveTimer?.task_id === task.id ? (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-emerald-600">
-                    กำลังจับเวลาอยู่ (เริ่มเมื่อ {formatDateTime(myActiveTimer.started_at)})
-                  </span>
-                  <TimerActionForm
-                    action={pauseTaskTimerAction}
-                    taskId={task.id}
-                    buttonLabel="หยุดชั่วคราว"
-                    pendingLabel="กำลังหยุด..."
-                    buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+              <div className="mb-3 flex flex-wrap items-baseline gap-2">
+                <span className="text-xs text-slate-500">เวลาสะสมทั้งหมด</span>
+                {activeTaskTimeEntry ? (
+                  <LiveElapsedTime
+                    startedAt={activeTaskTimeEntry.started_at}
+                    baseSeconds={closedTaskSeconds}
+                    className="font-mono text-lg font-semibold tabular-nums"
                   />
-                </div>
-              ) : myActiveTimer ? (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-500">กำลังจับเวลางานอื่นอยู่</span>
-                  <TimerActionForm
-                    action={switchTaskTimerAction}
-                    taskId={task.id}
-                    buttonLabel="สลับมาจับเวลางานนี้"
-                    pendingLabel="กำลังสลับ..."
-                    buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+                ) : (
+                  <ElapsedTime
+                    seconds={closedTaskSeconds}
+                    className="font-mono text-lg font-semibold tabular-nums"
                   />
-                </div>
-              ) : (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-400">ยังไม่ได้เริ่มจับเวลา</span>
-                  <TimerActionForm
-                    action={startTaskTimerAction}
-                    taskId={task.id}
-                    buttonLabel="เริ่มจับเวลางานนี้"
-                    pendingLabel="กำลังเริ่ม..."
-                    buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
-                  />
-                </div>
+                )}
+                {activeTaskTimeEntry && (
+                  <span className="text-xs text-emerald-700">กำลังเดินอยู่</span>
+                )}
+              </div>
+
+              {canTrackOwnTime && (
+                <>
+                  {myActiveTimer?.task_id === task.id ? (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-emerald-700">
+                        เริ่มช่วงล่าสุด {formatThaiDateTime(myActiveTimer.started_at)}
+                      </span>
+                      <TimerActionForm
+                        action={pauseTaskTimerAction}
+                        taskId={task.id}
+                        buttonLabel="หยุดชั่วคราว"
+                        pendingLabel="กำลังหยุด..."
+                        buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+                      />
+                    </div>
+                  ) : myActiveTimer ? (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">กำลังจับเวลางานอื่นอยู่</span>
+                      <TimerActionForm
+                        action={switchTaskTimerAction}
+                        taskId={task.id}
+                        buttonLabel="สลับมาจับเวลางานนี้"
+                        pendingLabel="กำลังสลับ..."
+                        buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-400">
+                        {closedTaskSeconds > 0
+                          ? "หยุดจับเวลาอยู่ — เริ่มต่อได้จากเวลาสะสมเดิม"
+                          : "ยังไม่ได้เริ่มจับเวลา"}
+                      </span>
+                      <TimerActionForm
+                        action={startTaskTimerAction}
+                        taskId={task.id}
+                        buttonLabel={closedTaskSeconds > 0 ? "ทำงานต่อ" : "เริ่มจับเวลางานนี้"}
+                        pendingLabel="กำลังเริ่ม..."
+                        buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </section>
-          )}
+          ) : null}
 
           {/* Activity feed */}
           <section className="rounded-lg border border-slate-200 bg-white p-4">
@@ -509,29 +579,13 @@ export default async function TaskDetailPage(
                 <div key={i} className="border-t border-slate-100 pt-3 first:border-t-0 first:pt-0">
                   {item.node}
                   <p className="mt-0.5 text-xs text-slate-400">
-                    {formatDateTime(item.at)}
+                    {formatThaiDateTime(item.at)}
                   </p>
                 </div>
               ))}
             </div>
 
-            <form action={addCommentAction} className="mt-4 space-y-2 border-t border-slate-100 pt-4">
-              <input type="hidden" name="task_id" value={task.id} />
-              <textarea
-                name="body"
-                placeholder="เขียนความคิดเห็นหรือคำถาม"
-                required
-                className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm"
-                rows={2}
-              />
-              <label className="flex items-center gap-2 text-xs text-slate-500">
-                <input type="checkbox" name="is_question" />
-                เป็นคำถาม
-              </label>
-              <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
-                ส่งความคิดเห็น
-              </button>
-            </form>
+            <TaskCommentForm taskId={task.id} />
           </section>
         </div>
 

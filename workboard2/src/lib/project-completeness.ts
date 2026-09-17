@@ -23,16 +23,17 @@ interface ConditionalRuleLike {
   message: string;
 }
 
-// Checks the minimum set from CLAUDE.md: task owner/deadline/reviewer,
-// workstream-with-no-task, and playbook conditional gaps (e.g. a speaker
-// task with no coordination task). Task owner (assignee) and project owner
-// are guaranteed non-null by schema, so they're not checked here.
+// Checks project planning gaps without forcing every project into a Playbook.
+// Manual/ad-hoc projects may have no workstreams and manual tasks do not
+// require a reviewer by default. Reviewer requirements apply only to tasks
+// whose Playbook template explicitly marks requires_reviewer=true.
 export function checkProjectCompleteness(params: {
   project: { target_date: string | null };
   workstreams: WorkstreamLike[];
   tasks: TaskLike[];
   taskTagById: Map<string, string>;
   conditionalRules: ConditionalRuleLike[];
+  reviewRequiredTaskIds?: Set<string>;
 }): CompletenessIssue[] {
   const issues: CompletenessIssue[] = [];
 
@@ -63,11 +64,14 @@ export function checkProjectCompleteness(params: {
     });
   }
 
-  const missingReviewer = activeTasks.filter((t) => !t.reviewer_person_id).length;
+  const reviewRequiredTaskIds = params.reviewRequiredTaskIds ?? new Set<string>();
+  const missingReviewer = activeTasks.filter(
+    (t) => reviewRequiredTaskIds.has(t.id) && !t.reviewer_person_id,
+  ).length;
   if (missingReviewer > 0) {
     issues.push({
       severity: "warning",
-      message: `มี ${missingReviewer} งานที่ยังไม่มีผู้ตรวจ`,
+      message: `มี ${missingReviewer} งานจากร่างมาตรฐานที่กำหนดให้มีผู้ตรวจ แต่ยังไม่ได้ระบุผู้ตรวจ`,
     });
   }
 

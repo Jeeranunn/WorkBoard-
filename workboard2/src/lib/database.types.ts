@@ -1,5 +1,5 @@
 // Hand-written to mirror supabase/migrations/0001_foundation.sql through
-// 0010_weekly_planner.sql.
+// 0029_database_performance_hotpaths.sql.
 // Once a live Supabase project exists, regenerate with:
 //   npx supabase gen types typescript --project-id <id> > src/lib/database.types.ts
 
@@ -33,6 +33,16 @@ export type TaskStatus =
   | "CANCELLED";
 export type PriorityLevel = "P1" | "P2" | "P3" | "P4";
 export type TimeEntrySource = "SYSTEM_TRACKED" | "RECONSTRUCTED" | "SELF_DECLARED";
+
+// Standard Supabase-generated JSON type, for RPCs that return `jsonb`
+// (e.g. current_user_context below) rather than a typed table row.
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[];
 
 export interface Database {
   public: {
@@ -179,6 +189,8 @@ export interface Database {
           person_id: string;
           role: AppRole;
           organization_id: string | null;
+          valid_from: string;
+          valid_to: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -187,6 +199,8 @@ export interface Database {
           person_id: string;
           role: AppRole;
           organization_id?: string | null;
+          valid_from?: string;
+          valid_to?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -819,6 +833,84 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["planned_slots"]["Insert"]>;
         Relationships: [];
       };
+      learning_reflections: {
+        Row: {
+          id: string; person_id: string; meeting_name: string; meeting_date: string;
+          note: string; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; person_id: string; meeting_name: string; meeting_date: string;
+          note: string; created_at?: string; updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["learning_reflections"]["Insert"]>;
+        Relationships: [];
+      };
+      executive_questions: {
+        Row: {
+          id: string; sender_person_id: string; recipient_person_id: string | null;
+          question: string; status: "OPEN" | "ANSWERED" | "WITHDRAWN";
+          withdrawn_at: string | null; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; sender_person_id: string; recipient_person_id?: string | null;
+          question: string; status?: "OPEN" | "ANSWERED" | "WITHDRAWN";
+          withdrawn_at?: string | null; created_at?: string; updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["executive_questions"]["Insert"]>;
+        Relationships: [];
+      };
+      executive_question_replies: {
+        Row: {
+          id: string; question_id: string; author_person_id: string;
+          body: string; created_at: string;
+        };
+        Insert: {
+          id?: string; question_id: string; author_person_id: string;
+          body: string; created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["executive_question_replies"]["Insert"]>;
+        Relationships: [];
+      };
+      meeting_requests: {
+        Row: {
+          id: string; sender_person_id: string; recipient_person_id: string | null;
+          topic: string; requested_start: string; duration_minutes: number;
+          location: string | null;
+          status: "PENDING" | "ACCEPTED" | "DECLINED" | "RESCHEDULE_PROPOSED" | "CANCELLED";
+          executive_remark: string | null; proposed_start: string | null;
+          proposed_location: string | null; responded_at: string | null;
+          cancelled_at: string | null; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; sender_person_id: string; recipient_person_id?: string | null;
+          topic: string; requested_start: string; duration_minutes?: number;
+          location?: string | null;
+          status?: "PENDING" | "ACCEPTED" | "DECLINED" | "RESCHEDULE_PROPOSED" | "CANCELLED";
+          executive_remark?: string | null; proposed_start?: string | null;
+          proposed_location?: string | null; responded_at?: string | null;
+          cancelled_at?: string | null; created_at?: string; updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["meeting_requests"]["Insert"]>;
+        Relationships: [];
+      };
+      management_memos: {
+        Row: {
+          id: string; sender_person_id: string; subject: string; body: string | null;
+          link: string | null; withdrawn_at: string | null; created_at: string; updated_at: string;
+        };
+        Insert: {
+          id?: string; sender_person_id: string; subject: string; body?: string | null;
+          link?: string | null; withdrawn_at?: string | null; created_at?: string; updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["management_memos"]["Insert"]>;
+        Relationships: [];
+      };
+      management_memo_recipients: {
+        Row: { memo_id: string; recipient_person_id: string; acknowledged_at: string | null; };
+        Insert: { memo_id: string; recipient_person_id: string; acknowledged_at?: string | null; };
+        Update: Partial<Database["public"]["Tables"]["management_memo_recipients"]["Insert"]>;
+        Relationships: [];
+      };
       suggestions: {
         Row: {
           id: string;
@@ -830,6 +922,7 @@ export interface Database {
           status: "pending" | "accepted" | "rejected";
           created_at: string;
           responded_at: string | null;
+          applied_at: string | null;
         };
         Insert: {
           id?: string;
@@ -841,6 +934,7 @@ export interface Database {
           status?: "pending" | "accepted" | "rejected";
           created_at?: string;
           responded_at?: string | null;
+          applied_at?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["suggestions"]["Insert"]>;
         Relationships: [];
@@ -848,6 +942,53 @@ export interface Database {
     };
     Views: Record<string, never>;
     Functions: {
+      send_executive_question: {
+        Args: { p_question: string; p_recipient_person_id?: string | null };
+        Returns: Database["public"]["Tables"]["executive_questions"]["Row"];
+      };
+      reply_executive_question: {
+        Args: { p_question_id: string; p_body: string };
+        Returns: Database["public"]["Tables"]["executive_question_replies"]["Row"];
+      };
+      withdraw_executive_question: {
+        Args: { p_question_id: string };
+        Returns: Database["public"]["Tables"]["executive_questions"]["Row"];
+      };
+      create_meeting_request: {
+        Args: {
+          p_topic: string; p_requested_start: string; p_duration_minutes: number;
+          p_location?: string | null; p_recipient_person_id?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["meeting_requests"]["Row"];
+      };
+      respond_meeting_request: {
+        Args: {
+          p_request_id: string;
+          p_status: "PENDING" | "ACCEPTED" | "DECLINED" | "RESCHEDULE_PROPOSED" | "CANCELLED";
+          p_remark?: string | null; p_proposed_start?: string | null; p_proposed_location?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["meeting_requests"]["Row"];
+      };
+      confirm_meeting_reschedule: {
+        Args: { p_request_id: string };
+        Returns: Database["public"]["Tables"]["meeting_requests"]["Row"];
+      };
+      cancel_meeting_request: {
+        Args: { p_request_id: string };
+        Returns: Database["public"]["Tables"]["meeting_requests"]["Row"];
+      };
+      send_management_memo: {
+        Args: { p_subject: string; p_body?: string | null; p_link?: string | null };
+        Returns: Database["public"]["Tables"]["management_memos"]["Row"];
+      };
+      acknowledge_management_memo: {
+        Args: { p_memo_id: string };
+        Returns: undefined;
+      };
+      active_executive_people: {
+        Args: Record<PropertyKey, never>;
+        Returns: string[];
+      };
       current_person_id: {
         Args: Record<string, never>;
         Returns: string;
@@ -1001,6 +1142,103 @@ export interface Database {
       respond_to_suggestion: {
         Args: { p_suggestion_id: string; p_status: string };
         Returns: Database["public"]["Tables"]["suggestions"]["Row"];
+      };
+      create_manual_task: {
+        Args: {
+          p_project_id: string;
+          p_title: string;
+          p_description?: string | null;
+          p_workstream_id?: string | null;
+          p_assignee_person_id?: string | null;
+          p_reviewer_person_id?: string | null;
+          p_approver_person_id?: string | null;
+          p_deadline?: string | null;
+          p_estimated_hours?: number | null;
+          p_is_important?: boolean;
+          p_is_urgent?: boolean;
+        };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      create_project_with_optional_playbook: {
+        Args: {
+          p_organization_id: string;
+          p_name: string;
+          p_description?: string | null;
+          p_start_date?: string | null;
+          p_target_date?: string | null;
+          p_playbook_id?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["projects"]["Row"];
+      };
+      managed_people_in_organizations: {
+        Args: { p_organization_ids: string[] };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          organization_id: string;
+        }[];
+      };
+      manage_task_people: {
+        Args: {
+          p_task_id: string;
+          p_assignee_person_id: string;
+          p_reviewer_person_id?: string | null;
+          p_approver_person_id?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      apply_accepted_suggestion: {
+        Args: { p_suggestion_id: string };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      end_position_lifecycle: {
+        Args: { p_position_id: string };
+        Returns: Database["public"]["Tables"]["positions"]["Row"];
+      };
+      end_unit_lifecycle: {
+        Args: { p_unit_id: string };
+        Returns: Database["public"]["Tables"]["organization_units"]["Row"];
+      };
+      capacity_time_snapshot: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          person_id: string;
+          attendance_session_id: string | null;
+          clock_in_at: string | null;
+          is_on_break: boolean;
+          break_started_at: string | null;
+          active_task_id: string | null;
+          active_task_started_at: string | null;
+          active_task_accumulated_seconds: number;
+        }[];
+      };
+      current_user_context: {
+        Args: Record<PropertyKey, never>;
+        Returns: Json | null;
+      };
+      update_task_priority: {
+        Args: {
+          p_task_id: string;
+          p_is_important: boolean;
+          p_is_urgent: boolean;
+        };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      update_manual_task_details: {
+        Args: {
+          p_task_id: string;
+          p_title: string;
+          p_description?: string | null;
+          p_deadline?: string | null;
+          p_estimated_hours?: number | null;
+          p_is_important?: boolean;
+          p_is_urgent?: boolean;
+        };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
+      };
+      cancel_task_from_active_work: {
+        Args: { p_task_id: string };
+        Returns: Database["public"]["Tables"]["tasks"]["Row"];
       };
     };
     Enums: {

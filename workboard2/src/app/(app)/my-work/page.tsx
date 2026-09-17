@@ -15,13 +15,9 @@ import {
 } from "./actions";
 import { pauseTaskTimerAction } from "../tasks/actions";
 import { TimerActionForm } from "@/components/tasks/timer-action-form";
-
-function formatTime(value: string): string {
-  return new Date(value).toLocaleString("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
-}
+import { AttendanceActionForm } from "@/components/time/attendance-action-form";
+import { LiveElapsedTime } from "@/components/time/live-elapsed-time";
+import { formatThaiDateTime, bangkokTodayKey } from "@/lib/date-time";
 
 interface RawTask {
   id: string;
@@ -48,10 +44,11 @@ export default async function MyWorkPage() {
 
   const now = new Date();
   const nowIso = now.toISOString();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-  const tomorrowStartIso = tomorrowStart.toISOString();
-  const weekAheadIso = new Date(todayStart.getTime() + 8 * 24 * 60 * 60 * 1000).toISOString();
+  const todayKey = bangkokTodayKey(now);
+  const [todayYear, todayMonth, todayDay] = todayKey.split("-").map(Number);
+  const bangkokMidnightUtc = Date.UTC(todayYear, todayMonth - 1, todayDay) - 7 * 60 * 60 * 1000;
+  const tomorrowStartIso = new Date(bangkokMidnightUtc + 24 * 60 * 60 * 1000).toISOString();
+  const weekAheadIso = new Date(bangkokMidnightUtc + 8 * 24 * 60 * 60 * 1000).toISOString();
 
   // The 7 buckets below (overdue/waitingForMe/dueToday/p1/inProgress/upcoming/
   // waitingForOthers) used to be 7 separate queries, but every one of them is
@@ -61,11 +58,34 @@ export default async function MyWorkPage() {
   // single fetch plus in-memory bucketing produces identical results in one
   // round trip instead of seven. A task can still appear in multiple
   // sections at once (e.g. an overdue P1 task), matching the prior behavior.
-  const { data: involvedTasks } = await supabase
-    .from("tasks")
-    .select(TASK_COLUMNS)
-    .or(involvedFilter)
-    .in("status", ACTIVE_TASK_STATUSES);
+  //
+  // attendanceSession and activeTimer only depend on personId, same as
+  // involvedTasks — nothing here depends on the task list — so they belong
+  // in this same round trip instead of waiting behind the projects/holders
+  // lookup that only becomes possible once involvedTasks resolves.
+  const [
+    { data: involvedTasks },
+    { data: attendanceSession },
+    { data: activeTimer },
+  ] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select(TASK_COLUMNS)
+      .or(involvedFilter)
+      .in("status", ACTIVE_TASK_STATUSES),
+    supabase
+      .from("attendance_sessions")
+      .select("id, clock_in_at")
+      .eq("person_id", personId)
+      .is("clock_out_at", null)
+      .maybeSingle(),
+    supabase
+      .from("task_time_entries")
+      .select("id, task_id, started_at")
+      .eq("person_id", personId)
+      .is("ended_at", null)
+      .maybeSingle(),
+  ]);
 
   const allTasks: RawTask[] = involvedTasks ?? [];
 
@@ -118,26 +138,15 @@ export default async function MyWorkPage() {
     (holders ?? []).map((h) => [h.id, h.full_name]),
   );
 
-  // Attendance (session -> break) and task timer (timer -> its task) are two
-  // independent chains — each step only depends on its own prior step, not
-  // on the other chain — so each round only waits on the slower of the two,
-  // instead of all four running one after another.
-  const [{ data: attendanceSession }, { data: activeTimer }] = await Promise.all([
-    supabase
-      .from("attendance_sessions")
-      .select("id, clock_in_at")
-      .eq("person_id", personId)
-      .is("clock_out_at", null)
-      .maybeSingle(),
-    supabase
-      .from("task_time_entries")
-      .select("id, task_id, started_at")
-      .eq("person_id", personId)
-      .is("ended_at", null)
-      .maybeSingle(),
-  ]);
-
-  const [{ data: activeBreak }, { data: activeTimerTask }] = await Promise.all([
+  // attendanceSession -> activeBreak and activeTimer -> {activeTimerTask,
+  // priorTimerEntries} are two independent chains that both only depend on
+  // the attendanceSession/activeTimer fetched above, so this round only
+  // waits on the slower of the two instead of running one after another.
+  const [
+    { data: activeBreak },
+    { data: activeTimerTask },
+    { data: priorTimerEntries },
+  ] = await Promise.all([
     attendanceSession
       ? supabase
           .from("attendance_breaks")
@@ -149,7 +158,33 @@ export default async function MyWorkPage() {
     activeTimer
       ? supabase.from("tasks").select("id, title").eq("id", activeTimer.task_id).maybeSingle()
       : Promise.resolve({ data: null }),
+    activeTimer
+      ? supabase
+          .from("task_time_entries")
+          .select("started_at, ended_at")
+          .eq("person_id", personId)
+          .eq("task_id", activeTimer.task_id)
+          .not("ended_at", "is", null)
+      : Promise.resolve({
+          data: [] as { started_at: string; ended_at: string | null }[],
+        }),
   ]);
+
+  const priorActiveTaskSeconds = (priorTimerEntries ?? []).reduce(
+    (sum, entry) =>
+      entry.ended_at
+        ? sum +
+          Math.max(
+            0,
+            Math.floor(
+              (new Date(entry.ended_at).getTime() -
+                new Date(entry.started_at).getTime()) /
+                1000,
+            ),
+          )
+        : sum,
+    0,
+  );
 
   function toRows(tasks: RawTask[] | null): TaskListRow[] {
     return (tasks ?? []).map((t) => ({
@@ -178,56 +213,83 @@ export default async function MyWorkPage() {
       <section className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-4">
         <div className="text-sm">
           {!attendanceSession && <span className="text-slate-400">ยังไม่ได้ Clock In</span>}
-          {attendanceSession && !activeBreak && (
-            <span>เข้างานเมื่อ {formatTime(attendanceSession.clock_in_at)}</span>
-          )}
-          {attendanceSession && activeBreak && (
-            <span className="text-amber-600">
-              กำลังพักตั้งแต่ {formatTime(activeBreak.break_start_at)}
-            </span>
+          {attendanceSession && (
+            <div className="space-y-1">
+              <div>
+                เข้างานเมื่อ {formatThaiDateTime(attendanceSession.clock_in_at)}
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className={activeBreak ? "text-amber-600" : "text-emerald-700"}>
+                  {activeBreak ? "กำลังพัก · เวลาตั้งแต่ Clock In" : "เวลาตั้งแต่ Clock In"}
+                </span>
+                <LiveElapsedTime
+                  startedAt={attendanceSession.clock_in_at}
+                  className="font-mono text-base font-semibold tabular-nums"
+                />
+              </div>
+              {activeBreak && (
+                <div className="text-xs text-amber-600">
+                  พักตั้งแต่ {formatThaiDateTime(activeBreak.break_start_at)}
+                </div>
+              )}
+            </div>
           )}
         </div>
         <div className="flex gap-2">
           {!attendanceSession && (
-            <form action={clockInAction}>
-              <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
-                Clock In
-              </button>
-            </form>
+            <AttendanceActionForm
+              action={clockInAction}
+              label="Clock In"
+              pendingLabel="กำลังเข้างาน..."
+              buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+            />
           )}
           {attendanceSession && !activeBreak && (
-            <form action={startBreakAction}>
-              <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
-                พัก
-              </button>
-            </form>
+            <AttendanceActionForm
+              action={startBreakAction}
+              label="พัก"
+              pendingLabel="กำลังพัก..."
+              buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            />
           )}
           {attendanceSession && activeBreak && (
-            <form action={resumeFromBreakAction}>
-              <button className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white">
-                กลับมาทำงาน
-              </button>
-            </form>
+            <AttendanceActionForm
+              action={resumeFromBreakAction}
+              label="กลับมาทำงาน"
+              pendingLabel="กำลังกลับมาทำงาน..."
+              buttonClassName="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white"
+            />
           )}
           {attendanceSession && (
-            <form action={clockOutAction}>
-              <button className="rounded-md border border-slate-300 px-3 py-1.5 text-sm">
-                Clock Out
-              </button>
-            </form>
+            <AttendanceActionForm
+              action={clockOutAction}
+              label="Clock Out"
+              pendingLabel="กำลังออกงาน..."
+              buttonClassName="rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            />
           )}
         </div>
       </section>
 
       {activeTimer && activeTimerTask && (
         <section className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm">
-          <span>
-            กำลังทำงาน:{" "}
-            <Link href={`/tasks/${activeTimerTask.id}`} className="font-medium hover:underline">
-              {activeTimerTask.title}
-            </Link>{" "}
-            (เริ่มเมื่อ {formatTime(activeTimer.started_at)})
-          </span>
+          <div>
+            <div>
+              กำลังทำงาน:{" "}
+              <Link href={`/tasks/${activeTimerTask.id}`} className="font-medium hover:underline">
+                {activeTimerTask.title}
+              </Link>
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-xs text-emerald-700">
+              <span>ใช้เวลาแล้ว</span>
+              <LiveElapsedTime
+                startedAt={activeTimer.started_at}
+                baseSeconds={priorActiveTaskSeconds}
+                className="font-mono text-base font-semibold tabular-nums"
+              />
+              <span className="text-slate-500">· เริ่ม {formatThaiDateTime(activeTimer.started_at)}</span>
+            </div>
+          </div>
           <TimerActionForm
             action={pauseTaskTimerAction}
             taskId={activeTimerTask.id}

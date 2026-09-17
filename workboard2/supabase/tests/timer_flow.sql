@@ -24,6 +24,14 @@
 -- ===========================================================================
 
 set app.current_uid = '10000000-0000-0000-0000-000000000005'; -- MEMBER-A
+
+-- Timer integrity now requires the task itself to be in a working state.
+-- Move both MEMBER-A tasks used by this suite into IN_PROGRESS first.
+select acknowledge_task('70000000-0000-0000-0000-000000000004');
+select start_task('70000000-0000-0000-0000-000000000004');
+select acknowledge_task('70000000-0000-0000-0000-000000000003');
+select start_task('70000000-0000-0000-0000-000000000003');
+
 do $$
 begin
   perform start_task_timer('70000000-0000-0000-0000-000000000004'); -- t4, MEMBER-A's own task
@@ -117,11 +125,26 @@ end;
 $$;
 
 -- ===========================================================================
--- 3. Precondition: on break blocks both start and switch (checked before
---    the concurrent-timer check, so this holds even with t3 mid-timer).
+-- 3. Starting a break must atomically stop the active task timer, and the
+--    break must then block both start and switch.
 -- ===========================================================================
 
 select start_break();
+
+do $$
+declare
+  n int;
+begin
+  select count(*) into n
+  from task_time_entries
+  where person_id = '20000000-0000-0000-0000-000000000005'
+    and ended_at is null;
+  if n <> 0 then
+    raise exception 'ASSERTION_FAILURE: starting a break must stop the active task timer';
+  end if;
+  raise notice 'OK: start_break atomically stopped the active task timer';
+end;
+$$;
 
 do $$
 begin
@@ -152,75 +175,60 @@ end;
 $$;
 
 select resume_from_break();
-select pause_task_timer(); -- stop t3's timer before the permission checks below
 
 -- ===========================================================================
--- 4. Permission: only the assignee, an org-HEAD, or ADMIN may touch the
---    timer for a task — an uninvolved person must be rejected outright,
---    before their own attendance state is even considered.
+-- 4. Permission: task-time belongs to the actual assignee only.
+--    HEAD/ADMIN retain workflow oversight, but must not record their own
+--    time against another person's task.
 -- ===========================================================================
 
-set app.current_uid = '10000000-0000-0000-0000-000000000006'; -- MEMBER-B, Org B, uninvolved in t4
+set app.current_uid = '10000000-0000-0000-0000-000000000006'; -- MEMBER-B, uninvolved in t4
 do $$
 begin
   perform start_task_timer('70000000-0000-0000-0000-000000000004');
-  raise exception 'ASSERTION_FAILURE: an uninvolved person must not start a timer on someone else''s task';
+  raise exception 'ASSERTION_FAILURE: MEMBER-B must not start a timer on MEMBER-A''s task';
 exception
   when others then
     if sqlerrm like 'ASSERTION_FAILURE%' then raise; end if;
-    if sqlerrm <> 'ไม่มีสิทธิ์จับเวลางานนี้' then
-      raise exception 'ASSERTION_FAILURE: expected the no-permission message, got: %', sqlerrm;
+    if sqlerrm <> 'จับเวลาได้เฉพาะงานที่มอบหมายให้คุณ' then
+      raise exception 'ASSERTION_FAILURE: unexpected permission message: %', sqlerrm;
     end if;
-    raise notice 'OK: uninvolved MEMBER-B blocked from starting a timer on t4 (%)', sqlerrm;
+    raise notice 'OK: uninvolved MEMBER-B blocked from timing t4';
 end;
 $$;
 
--- HEAD-A is t3's reviewer and Org A's HEAD, not its assignee — the
--- org-oversight override in is_task_assignee_side_actor() must still let
--- them use the timer, on their OWN attendance (attendance is per-actor,
--- not per-task).
 set app.current_uid = '10000000-0000-0000-0000-000000000003'; -- HEAD-A
 select clock_in();
-select start_task_timer('70000000-0000-0000-0000-000000000003'); -- t3, MEMBER-A's task
-
 do $$
-declare
-  n int;
 begin
-  select count(*) into n from task_time_entries
-    where person_id = '20000000-0000-0000-0000-000000000003'
-      and task_id = '70000000-0000-0000-0000-000000000003' and ended_at is null;
-  if n <> 1 then
-    raise exception 'ASSERTION_FAILURE: expected HEAD-A''s own running entry on t3, got %', n;
-  end if;
-  raise notice 'OK: HEAD-A (org oversight, not assignee) started a timer on t3';
+  perform start_task_timer('70000000-0000-0000-0000-000000000003');
+  raise exception 'ASSERTION_FAILURE: HEAD-A must not record time on MEMBER-A''s task';
+exception
+  when others then
+    if sqlerrm like 'ASSERTION_FAILURE%' then raise; end if;
+    if sqlerrm <> 'จับเวลาได้เฉพาะงานที่มอบหมายให้คุณ' then
+      raise exception 'ASSERTION_FAILURE: unexpected HEAD timer message: %', sqlerrm;
+    end if;
+    raise notice 'OK: HEAD workflow override does not leak into task-time ownership';
 end;
 $$;
-
-select pause_task_timer();
 select clock_out();
 
--- ADMIN is a global override too, and likewise clocks in on their own
--- attendance, unrelated to Org A/B.
 set app.current_uid = '10000000-0000-0000-0000-000000000001'; -- ADMIN
 select clock_in();
-select start_task_timer('70000000-0000-0000-0000-000000000003'); -- t3, not ADMIN's task or org
-
 do $$
-declare
-  n int;
 begin
-  select count(*) into n from task_time_entries
-    where person_id = '20000000-0000-0000-0000-000000000001'
-      and task_id = '70000000-0000-0000-0000-000000000003' and ended_at is null;
-  if n <> 1 then
-    raise exception 'ASSERTION_FAILURE: expected ADMIN''s own running entry on t3, got %', n;
-  end if;
-  raise notice 'OK: ADMIN (global override) started a timer on t3';
+  perform start_task_timer('70000000-0000-0000-0000-000000000003');
+  raise exception 'ASSERTION_FAILURE: ADMIN must not record time on MEMBER-A''s task';
+exception
+  when others then
+    if sqlerrm like 'ASSERTION_FAILURE%' then raise; end if;
+    if sqlerrm <> 'จับเวลาได้เฉพาะงานที่มอบหมายให้คุณ' then
+      raise exception 'ASSERTION_FAILURE: unexpected ADMIN timer message: %', sqlerrm;
+    end if;
+    raise notice 'OK: ADMIN workflow override does not leak into task-time ownership';
 end;
 $$;
-
-select pause_task_timer();
 select clock_out();
 
 -- ===========================================================================
